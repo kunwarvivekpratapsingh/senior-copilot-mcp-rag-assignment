@@ -1,0 +1,145 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "copilot-mcp-rag"
+version = "0.1.0"
+description = "Multi-MCP Enterprise Operations Copilot — MCP servers, document RAG, and a grounded chat GUI over an Alarm Management API"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+
+# Core runtime shared by every component. Component-specific dependencies live in
+# the optional-dependency groups below so each Docker image installs only what it
+# needs and image builds stay fast.
+dependencies = [
+    "pydantic>=2.7",
+    "pydantic-settings>=2.2",
+    "structlog>=24.1",
+]
+
+[project.optional-dependencies]
+# services/alarm-simulator — the candidate-built backend
+simulator = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0",
+]
+
+# connectors/alarm_api + both MCP servers
+mcp = [
+    "mcp>=1.2",
+    "httpx>=0.27",
+]
+
+# apps/backend — orchestrator, LLM provider, SSE
+backend = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "sse-starlette>=2.1",
+    "httpx>=0.27",
+    "mcp>=1.2",
+    "anthropic>=0.69",
+]
+
+# rag/ — ingestion and retrieval
+rag = [
+    "chromadb>=0.5",
+    "rank-bm25>=0.2.2",
+    "sentence-transformers>=3.0",
+    "pypdf>=4.2",
+    "python-frontmatter>=1.1",
+]
+
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "respx>=0.21",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+# Every component installed at once, for local development and CI.
+all = [
+    "copilot-mcp-rag[simulator,mcp,backend,rag,dev]",
+]
+
+# ---------------------------------------------------------------------------
+# Packaging
+#
+# The repository structure mandated by Submission_and_Evaluation_Guidelines.md §3
+# uses hyphenated directory names (mcp-servers/alarm-management), which are not
+# importable Python package names. We keep the mandated tree exactly as specified
+# and place a correctly-named Python package inside each directory. Hatchling maps
+# each path below to a top-level importable package, so the mandated layout and
+# valid Python imports coexist without symlinks or PYTHONPATH hacks.
+# ---------------------------------------------------------------------------
+[tool.hatch.build.targets.wheel]
+packages = [
+    "rag",
+    "connectors/alarm_api",
+    "packages/schemas/copilot_schemas",
+    "apps/backend/copilot_backend",
+    "services/alarm-simulator/alarm_simulator",
+    "mcp-servers/alarm-management/alarm_mcp",
+    "mcp-servers/github-issues/github_mcp",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "rag/tests"]
+asyncio_mode = "auto"
+addopts = "-q --strict-markers"
+markers = [
+    "e2e: requires the full docker compose stack to be running",
+    "contract: Postman/newman contract checks",
+]
+
+[tool.coverage.run]
+branch = true
+source = [
+    "rag",
+    "connectors",
+    "packages",
+    "apps/backend",
+    "services",
+    "mcp-servers",
+]
+omit = ["*/tests/*", "*/__init__.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+    "S",   # flake8-bandit — security lint, relevant to the assignment's security criteria
+]
+ignore = [
+    "E501", # line length is enforced by the formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may use assert (S101) and hardcoded fake tokens (S105/S106).
+"tests/**" = ["S101", "S105", "S106"]
+"rag/tests/**" = ["S101", "S105", "S106"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+strict_equality = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["chromadb.*", "rank_bm25.*", "sentence_transformers.*", "frontmatter.*"]
+ignore_missing_imports = true

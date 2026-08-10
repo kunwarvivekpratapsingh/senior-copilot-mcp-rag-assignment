@@ -1,0 +1,31 @@
+# Normalise line endings so the repo behaves identically on Windows, macOS, and
+# inside the Linux containers. Without this, a shell script authored on Windows
+# gets CRLF endings and fails in the container with a confusing
+# "\r: command not found".
+
+* text=auto eol=lf
+
+# Files that MUST be LF — they are executed by Linux shells or Docker.
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.Dockerfile text eol=lf
+Makefile    text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+
+# Windows-only, keep CRLF so PowerShell and cmd behave.
+*.ps1       text eol=crlf
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# Binary — never touch.
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.pdf       binary
+*.ico       binary
+*.woff      binary
+*.woff2     binary
+*.db        binary
+*.sqlite3   binary
