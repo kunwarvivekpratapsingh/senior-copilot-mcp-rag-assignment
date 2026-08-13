@@ -84,6 +84,46 @@ def test_no_live_credentials_anywhere_in_the_tree() -> None:
     assert not offenders, "Possible committed credentials:\n" + "\n".join(offenders)
 
 
+def _env_example_keys() -> set[str]:
+    keys: set[str] = set()
+    for line in (REPO_ROOT / ".env.example").read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            keys.add(stripped.partition("=")[0])
+    return keys
+
+
+def test_env_example_documents_every_setting() -> None:
+    """Every settings field the code reads must appear in .env.example.
+
+    A configuration key that exists in code but not in the sample file is invisible:
+    the only way to discover it is to read the source, which is exactly what the sample
+    file exists to prevent.
+    """
+    from alarm_mcp.config import Settings as AlarmMcpSettings
+    from alarm_simulator.config import Settings as SimulatorSettings
+    from copilot_backend.config import Settings as BackendSettings
+    from github_mcp.config import Settings as GitHubMcpSettings
+
+    documented = _env_example_keys()
+    # Bind ports and log level are container-level concerns with safe defaults; the
+    # rest must be discoverable from the sample file.
+    exempt = {"LOG_LEVEL", "MCP_ALARM_HOST", "MCP_ALARM_PORT",
+              "MCP_GITHUB_HOST", "MCP_GITHUB_PORT", "ALARM_SIM_DAYS",
+              "ALARM_SIM_ALARM_COUNT", "MAX_PAGE_SIZE"}
+
+    undocumented: list[str] = []
+    for settings in (SimulatorSettings, AlarmMcpSettings, GitHubMcpSettings, BackendSettings):
+        for field in settings.model_fields:
+            key = field.upper()
+            if key not in documented and key not in exempt:
+                undocumented.append(f"{settings.__module__}.{field} → {key}")
+
+    assert not undocumented, (
+        ".env.example does not document:\n" + "\n".join(sorted(undocumented))
+    )
+
+
 def test_env_example_uses_placeholder_values_for_secrets() -> None:
     """Secret-bearing keys in .env.example must be placeholders, not real values."""
     lines = (REPO_ROOT / ".env.example").read_text(encoding="utf-8").splitlines()

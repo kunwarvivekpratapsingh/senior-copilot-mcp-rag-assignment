@@ -27,6 +27,11 @@ from .resolver import PlaceholderError, referenced_steps, resolve_args
 
 logger = get_logger(__name__)
 
+# Tools that write to an external system, mapped to the argument their MCP contract
+# uses to carry the user's approval. Keyed by tool name rather than inferred from the
+# schema so that adding a write tool is a deliberate act, not an accident of naming.
+WRITE_TOOLS: dict[str, str] = {"create_issue": "confirmed"}
+
 
 @dataclass
 class ExecutionOutcome:
@@ -124,15 +129,21 @@ class PlanExecutor:
             # A write tool needs explicit approval. The MCP server enforces this too;
             # checking here means the user gets a confirmation prompt instead of an
             # error they cannot act on.
-            if step.tool in {"create_issue"} and step.tool not in self._confirmed:
-                record.status = StepStatus.FAILED
-                record.error_code = "CONFIRMATION_REQUIRED"
-                record.error_message = (
-                    "This step writes to an external system and needs your approval."
-                )
-                failed_steps.add(step.id)
-                yield "confirmation.required", record.to_event()
-                continue
+            if step.tool in WRITE_TOOLS:
+                if step.tool not in self._confirmed:
+                    record.status = StepStatus.FAILED
+                    record.error_code = "CONFIRMATION_REQUIRED"
+                    record.error_message = (
+                        "This step writes to an external system and needs your approval."
+                    )
+                    failed_steps.add(step.id)
+                    yield "confirmation.required", record.to_event()
+                    continue
+                # Carry the approval into the tool call. The server refuses without it,
+                # so an approval the orchestrator swallowed would be indistinguishable
+                # from no approval at all.
+                arguments = {**arguments, WRITE_TOOLS[step.tool]: True}
+                record.arguments = arguments
 
             result = await self._invoker.invoke(step.tool, arguments, trace_id=trace.trace_id)
             record.server = result.server

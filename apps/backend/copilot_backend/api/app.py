@@ -89,6 +89,15 @@ def build_retrieval(settings: Settings) -> RetrievalService | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # A pre-built copilot means someone (a test, or a host embedding this app) already
+    # owns the registry's lifetime. Opening a second one here would connect to servers
+    # nobody asked for and, worse, tear them down on a different task.
+    injected: Copilot | None = getattr(app.state, "copilot", None)
+    if injected is not None:
+        app.state.registry = injected.registry
+        yield
+        return
+
     settings = get_settings()
     configure_logging(settings.log_level, json_output=settings.log_format == "json")
 
@@ -111,7 +120,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info(
             "backend_ready",
             tools=registry.tool_count,
-            provider=app.state.copilot._provider.name,  # noqa: SLF001 — startup log
+            provider=app.state.copilot.provider_name,
         )
         yield
 

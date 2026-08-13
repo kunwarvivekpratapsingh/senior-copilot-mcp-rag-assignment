@@ -42,6 +42,15 @@ class Copilot:
         self._memory = memory or ConversationMemory()
         self._traces: dict[str, ExecutionTrace] = {}
 
+    @property
+    def registry(self) -> ToolRegistry:
+        """The tool registry this copilot plans against, also served by ``/mcp/tools``."""
+        return self._registry
+
+    @property
+    def provider_name(self) -> str:
+        return self._provider.name
+
     def trace(self, request_id: str) -> ExecutionTrace | None:
         return self._traces.get(request_id)
 
