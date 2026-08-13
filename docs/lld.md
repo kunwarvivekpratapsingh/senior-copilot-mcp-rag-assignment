@@ -15,11 +15,11 @@ sits between the two.
 
 | § | Contents | Written during | Status |
 |---|---|---|---|
-| 1 | Data model | Step 2 — simulator | Pending |
-| 2 | API contracts | Steps 2, 8 | Pending |
+| 1 | Data model | Step 2 — simulator | **Done** (1.4–1.5 pending) |
+| 2 | API contracts | Steps 2, 8 | **2.1 done**, 2.2–2.3 pending |
 | 3 | MCP tool contracts | Steps 3, 6 | Pending |
 | 4 | Module specifications | Steps 3–9 | Pending |
-| 5 | Algorithms | Steps 2, 5, 7 | Pending |
+| 5 | Algorithms | Steps 2, 5, 7 | **5.1–5.2, 5.7–5.8 done** |
 | 6 | Sequence diagrams | Step 7 | Pending |
 | 7 | State machines | Steps 4, 6, 7 | Pending |
 | 8 | Error taxonomy | Step 3 | Pending |
@@ -30,26 +30,116 @@ sits between the two.
 
 ## 1. Data model
 
-- **1.1** Simulator entity-relationship diagram
-- **1.2** Table definitions — column, type, nullability, default, constraint, index, and
-  the meaning of every field
-- **1.3** Identifier schemes (`AST-nnnn`, `ALM-nnnnn`, `CALC-nnnn`)
-- **1.4** Retrieval index — Chroma collection schema and the chunk metadata record
-- **1.5** Trace and conversation store
+### 1.1 Entity relationships
 
-_Pending — Step 2._
+```mermaid
+erDiagram
+    ASSETS ||--o{ ALARMS : "raises"
+    CALCULATIONS }o--|| ASSETS : "scoped by filters"
+
+    ASSETS {
+        string  asset_id PK "AST-nnnn"
+        string  asset_name "indexed, searched"
+        string  asset_type "pump, compressor, motor, fan, heater, vessel, tank, valve"
+        string  unit "Unit 1..5"
+        string  site "NorthPlant, SouthPlant, EastRefinery, WestTerminal"
+        string  criticality "low, medium, high"
+        string  manufacturer
+        string  model
+        datetime install_date
+        datetime last_maintenance "nullable"
+    }
+    ALARMS {
+        string  alarm_id PK "ALM-nnnnn"
+        string  asset_id FK
+        string  alarm_name "indexed"
+        string  alarm_type "process, safety, device, system"
+        string  severity "low, medium, high, critical"
+        string  status "active, acknowledged, cleared"
+        datetime start_time "indexed"
+        datetime end_time "nullable, set when cleared"
+        datetime ack_time "nullable, null while active"
+        int     ack_delay_seconds "nullable, denormalised"
+        float   value
+        float   setpoint
+        string  unit_of_measure "nullable"
+        string  operator_id "nullable, null while active"
+    }
+    CALCULATIONS {
+        string  calculation_id PK "CALC-<hex12>"
+        string  calculation_type
+        text    generated_code "display only, never executed"
+        text    filters_json
+        datetime created_at
+    }
+```
+
+### 1.2 Table notes
+
+**`assets`** — `asset_id` is the natural key the collections chain into every
+downstream request. Composite index `ix_assets_search` on `(asset_name, asset_type)`
+because search matches both together.
+
+**`alarms`** — two composite indexes matching the real access patterns:
+`ix_alarms_asset_time` on `(asset_id, start_time)` for "alarms for this asset in this
+window", and `ix_alarms_time_severity` on `(start_time, severity)` for the flood and
+correlation scans that sweep a whole unit.
+
+`ack_delay_seconds` is **denormalised** from `ack_time - start_time`. Acknowledgement
+delay appears in three KPIs, two calculations, and the priority score; recomputing a
+difference per row on every summary request is wasted work for a value that never
+changes after acknowledgement.
+
+**Invariants**, asserted in `tests/unit/test_simulator_seed.py`:
+
+- `status = 'active'` ⟹ `ack_time IS NULL` and `ack_delay_seconds IS NULL` and
+  `operator_id IS NULL`. An alarm cannot be simultaneously live and answered.
+- `end_time IS NOT NULL` ⟹ `end_time > start_time`.
+- Every `alarms.asset_id` resolves to a real asset.
+
+**`calculations`** — append-only. `generated_code` is stored for display; execution
+dispatches on `calculation_type` to a reviewed implementation.
+
+### 1.3 Identifier schemes
+
+| Entity | Format | Example | Rationale |
+|---|---|---|---|
+| Asset | `AST-` + 4-digit zero-padded sequence | `AST-0005` | Stable across runs for a fixed seed, so demo scripts and tests can name them |
+| Alarm | `ALM-` + 5-digit zero-padded sequence | `ALM-00069` | Same |
+| Calculation | `CALC-` + 12 hex characters | `CALC-7f8f0ea07384` | Created at runtime, so a random suffix avoids collisions without coordination |
+
+Sequential rather than UUID for assets and alarms specifically because a fixed seed
+must reproduce identical identifiers (NFR-05).
+
+### 1.4 Retrieval index
+
+_Pending — Step 5._
+
+### 1.5 Trace and conversation store
+
+_Pending — Step 8._
 
 ---
 
 ## 2. API contracts
 
-- **2.1** Alarm Management API — all 15 endpoints: method, path, request schema,
-  response schema, status codes, error codes, auth, trace-header behaviour, pagination
-- **2.2** Copilot backend — all 6 endpoints, same treatment
-- **2.3** SSE event envelope — `step.started`, `step.succeeded`, `step.failed`,
-  `retrieval.completed`, `answer.delta`, `answer.completed`, `confirmation.required`
+### 2.1 Alarm Management API
 
-_Pending — Steps 2 and 8._
+Fully specified in **[`api-integration.md`](api-integration.md)** — endpoint
+inventory, auth, trace headers, error envelope, enumerations, pagination semantics,
+the contract-critical response paths, and the filters that appear only in the
+chaining collection.
+
+Kept there rather than duplicated here because it is the document a reader
+integrating with the API will look for by name.
+
+### 2.2 Copilot backend
+
+_Pending — Step 8._
+
+### 2.3 SSE event envelope
+
+_Pending — Step 8._
 
 ---
 
@@ -86,19 +176,138 @@ _Pending — Steps 3–9._
 
 ## 5. Algorithms
 
-Pseudocode and complexity for each.
+Implemented in `services/alarm-simulator/alarm_simulator/analytics.py`, kept pure so
+each is unit-testable against a plain list of alarms with no HTTP or database.
 
-- **5.1** Co-occurrence correlation — support, confidence, lift within the lag window
-- **5.2** Rolling-window flood detection
-- **5.3** Header-aware chunking
-- **5.4** Reciprocal rank fusion for hybrid retrieval
-- **5.5** Citation construction and low-confidence thresholding
-- **5.6** Placeholder resolution grammar — `$<stepId>.output.<path>`, array indexing, and
-  the behaviour when a path does not resolve
-- **5.7** Priority scoring and the KPI formulas
-- **5.8** Deterministic seed-data generation
+### 5.1 Co-occurrence correlation
 
-_Pending — Steps 2, 5, 7._
+Answers "which alarms tend to fire together, and is that association real or chance?"
+
+```
+input:  alarms, lag_window_minutes, severity_threshold, min_support
+eligible ← alarms with severity rank ≥ threshold
+group eligible by asset_id                    # correlation is within one asset only
+for each asset's alarms, sorted by start_time:
+    for each alarm A at index i:
+        for each later alarm B:
+            if B.start - A.start > lag_window: break     # sorted, so stop early
+            if A.name = B.name: continue                 # not self-correlation
+            support[(A.name, B.name)] += 1
+            lags[(A.name, B.name)].append(B.start - A.start)
+for each pair with support ≥ min_support:
+    confidence ← support / count(A.name)
+    lift       ← confidence / (count(B.name) / total)
+sort by (support, lift) descending
+```
+
+**Restricting to a single asset is the load-bearing decision.** Two alarms on unrelated
+equipment happening to fire together is coincidence; counting it would swamp the real
+findings with noise proportional to plant size.
+
+`lift` is what separates a real association from a common alarm appearing everywhere:
+a name that fires constantly will show high support against everything, but its lift
+stays near 1.0. On the seeded estate the engineered pair reports support 31 with lift
+2.29.
+
+Complexity: O(n log n) sort plus O(n·k), where k is the number of alarms inside one
+lag window. The `break` on the sorted scan is what keeps k small rather than n.
+
+### 5.2 Rolling-window flood detection
+
+Answers "when did alarms arrive faster than an operator could process them?"
+
+```
+input:  alarms, threshold_count, rolling_window_minutes
+ordered ← alarms sorted by start_time
+for each left index:
+    extend right while ordered[right+1].start - ordered[left].start ≤ window
+    if (right - left + 1) ≥ threshold_count: emit candidate(left..right)
+merge candidates that overlap             # one burst yields one window
+for each merged window:
+    peak_rate ← alarm_count / max(span_minutes, 1)
+    dominant_alarm_name ← most common name in the window
+sort by alarm_count descending
+```
+
+**The merge step is what makes the output actionable.** Without it a 30-alarm burst
+emits ~20 near-identical overlapping windows, which is a wall of noise rather than a
+finding. Tested directly by `test_overlapping_detections_merge_into_one_burst`.
+
+Complexity: O(n log n) sort, then O(n) with a two-pointer scan — `right` never moves
+backwards across iterations.
+
+### 5.3 Header-aware chunking
+
+_Pending — Step 5._
+
+### 5.4 Reciprocal rank fusion
+
+_Pending — Step 5._
+
+### 5.5 Citation construction and low-confidence thresholding
+
+_Pending — Step 5._
+
+### 5.6 Placeholder resolution grammar
+
+_Pending — Step 7._
+
+### 5.7 Priority scoring and KPI formulas
+
+**Priority score** — weighted composite, 0–100:
+
+| Factor | Weight | Normalisation | Saturates at |
+|---|---:|---|---|
+| Severity | 0.35 | rank ÷ 3 | `critical` |
+| Asset criticality | 0.25 | low 0.0, medium 0.5, high 1.0 | `high` |
+| Recurrence | 0.25 | occurrences ÷ 20 | 20 occurrences |
+| Acknowledgement delay | 0.15 | seconds ÷ 3600 | 1 hour |
+
+`score = Σ (normalised × weight) × 100`, banded `≥70 critical`, `≥50 high`,
+`≥30 medium`, else `low`.
+
+Each factor saturates so a single extreme value cannot dominate — an alarm that
+recurred 500 times is not 25× more urgent than one that recurred 20 times.
+
+**The factor breakdown is part of the response contract, not a debugging aid.** A bare
+number is not actionable, and the copilot needs the components to explain a ranking
+rather than invent a rationale. `test_contributions_sum_to_the_score` asserts the
+breakdown reconciles.
+
+**KPI formulas:**
+
+| KPI | Formula | Note |
+|---|---|---|
+| `alarm_count` | `count(alarms)` | |
+| `critical_count` | `count(severity = 'critical')` | |
+| `avg_ack_delay` | `mean(ack_delay_seconds)` | Unacknowledged alarms are **excluded**, not counted as zero — including them would make a backlog look like fast response |
+| `recurring_rate` | `(count − distinct names) / count` | 0.0 when every alarm is unique |
+| `suppression_candidate_rate` | `count(alarms in names occurring ≥ 5) / count` | |
+
+All divisions guard against an empty group; `test_kpis_on_empty_input_do_not_divide_by_zero`
+covers it.
+
+### 5.8 Deterministic seed generation
+
+```
+rng ← Random(seed)                        # fixed seed ⇒ identical ids (NFR-05)
+build 30 assets from a fixed spec list    # names, units, sites are not random
+plant engineered patterns:                # see api-integration.md §8
+    BFP-101 recurring co-occurring pair    (30 pairs inside the lag window)
+    flood bursts in NorthPlant Unit 2      (4 bursts of 16–26 inside 8 minutes)
+    stale active alarms in Unit 1          (open 6–96 hours)
+    active alarms at EastRefinery
+    nuisance repetition in Unit 4
+    bimodal ack delays across SouthPlant   (70% prompt, 30% very slow)
+fill the remainder with background traffic to reach the target count
+```
+
+Timestamps anchor to the current date so "last 90 days" always returns data;
+identifiers never move. That split is why NFR-05 promises reproducible **ids**
+specifically rather than reproducible timestamps.
+
+Bimodal acknowledgement delay matters: a single uniform distribution would make the
+operator-efficiency KPI a constant, and the calculation would demonstrate nothing.
 
 ---
 

@@ -126,6 +126,21 @@ ignore = [
     "E501", # line length is enforced by the formatter
 ]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection idiom puts these callables in argument defaults.
+# B008 exists to catch accidental mutable defaults; here the call is the entire
+# point, and rewriting every endpoint to satisfy the lint would make the code
+# worse and diverge from every FastAPI example.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Header",
+    "fastapi.Form",
+    "fastapi.File",
+]
+
 [tool.ruff.lint.per-file-ignores]
 # Tests may use assert (S101) and hardcoded fake tokens (S105/S106).
 "tests/**" = ["S101", "S105", "S106"]
