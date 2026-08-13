@@ -92,13 +92,23 @@ jobs:
           done
 
       - name: Baseline collection
-        run: newman run postman/Alarm-API-Simulator.postman_collection.json
+        run: newman run postman/Alarm-API-Simulator.postman_collection.json -e test-data/local.postman_environment.json
 
       - name: Scenario collection
-        run: newman run postman/scenarios/Alarm-API-Scenarios.postman_collection.json
+        run: newman run postman/scenarios/Alarm-API-Scenarios.postman_collection.json -e test-data/local.postman_environment.json
 
       - name: Chaining collection
-        run: newman run postman/chaining/Alarm-API-Chaining.postman_collection.json
+        run: newman run postman/chaining/Alarm-API-Chaining.postman_collection.json -e test-data/local.postman_environment.json
+
+      - name: Negative control — the gate must be able to fail
+        # A green contract run means nothing if the runner cannot report a failure.
+        run: |
+          if newman run test-data/Negative-Control.postman_collection.json \
+               -e test-data/local.postman_environment.json; then
+            echo "the negative control passed — the contract check is not checking anything"
+            exit 1
+          fi
+          echo "negative control failed as expected"
 
   frontend:
     name: Frontend — types, lint, build

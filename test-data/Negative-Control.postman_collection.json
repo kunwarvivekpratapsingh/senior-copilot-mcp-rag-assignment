@@ -1,0 +1,94 @@
+{
+  "info": {
+    "name": "Negative control — proves newman actually fails",
+    "description": "A passing contract run only means something if the runner can fail. This collection asserts three things that are deliberately false against a correct simulator: an unauthenticated request returning 200, a missing asset returning a result, and a response field that does not exist.\n\nExpected outcome: 3 assertion failures, exit code 1.\n\n  newman run test-data/Negative-Control.postman_collection.json -e test-data/local.postman_environment.json\n\nIf this collection PASSES, the contract check in CI is not checking anything and the green ticks on the real collections are worthless.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Unauthenticated request must be rejected (asserted as 200 — must fail)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Deliberately wrong: the simulator returns 401 without a bearer token.",
+              "pm.test('DELIBERATELY WRONG: expects 200 on an unauthenticated request', function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/assets/search?query=pump",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets", "search"],
+          "query": [{ "key": "query", "value": "pump" }]
+        }
+      }
+    },
+    {
+      "name": "Unknown asset must 404 (asserted as a result — must fail)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Deliberately wrong: AST-9999 does not exist and the simulator returns 404.",
+              "pm.test('DELIBERATELY WRONG: expects metadata for a nonexistent asset', function () {",
+              "    pm.response.to.have.status(200);",
+              "    pm.expect(pm.response.json()).to.have.property('asset_name');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{auth_token}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/assets/AST-9999/metadata",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets", "AST-9999", "metadata"]
+        }
+      }
+    },
+    {
+      "name": "Response shape (asserts a field that does not exist — must fail)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Deliberately wrong: the search response has 'results', never 'assets'.",
+              "pm.test('DELIBERATELY WRONG: expects a field the contract does not define', function () {",
+              "    pm.expect(pm.response.json()).to.have.property('assets');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{auth_token}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/assets/search?query=Boiler Feed Pump 101",
+          "host": ["{{baseUrl}}"],
+          "path": ["assets", "search"],
+          "query": [{ "key": "query", "value": "Boiler Feed Pump 101" }]
+        }
+      }
+    }
+  ]
+}

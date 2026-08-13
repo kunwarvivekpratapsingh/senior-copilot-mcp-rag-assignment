@@ -10,7 +10,8 @@ PIP ?= $(PY) -m pip
 COMPOSE ?= docker compose
 
 .PHONY: help install lint format typecheck test test-unit test-integration test-e2e \
-        contract coverage ingest smoke up down logs ps docs screenshots clean
+        contract contract-negative coverage ingest smoke up down logs ps docs \
+        screenshots clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -54,10 +55,14 @@ coverage: ## Test suite with coverage report
 # acceptance gate for the simulator: it must pass before the MCP server is
 # considered integrable. Requires: npm i -g newman
 POSTMAN_DIR ?= postman
+POSTMAN_ENV ?= test-data/local.postman_environment.json
 contract: ## Run all Postman collections against a running simulator
-	newman run $(POSTMAN_DIR)/Alarm-API-Simulator.postman_collection.json
-	newman run $(POSTMAN_DIR)/scenarios/Alarm-API-Scenarios.postman_collection.json
-	newman run $(POSTMAN_DIR)/chaining/Alarm-API-Chaining.postman_collection.json
+	newman run $(POSTMAN_DIR)/Alarm-API-Simulator.postman_collection.json -e $(POSTMAN_ENV)
+	newman run $(POSTMAN_DIR)/scenarios/Alarm-API-Scenarios.postman_collection.json -e $(POSTMAN_ENV)
+	newman run $(POSTMAN_DIR)/chaining/Alarm-API-Chaining.postman_collection.json -e $(POSTMAN_ENV)
+
+contract-negative: ## Prove newman fails when assertions fail (expects exit 1)
+	! newman run test-data/Negative-Control.postman_collection.json -e $(POSTMAN_ENV)
 
 # --- Application tasks -----------------------------------------------------
 

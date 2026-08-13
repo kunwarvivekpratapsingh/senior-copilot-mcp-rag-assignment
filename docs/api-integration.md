@@ -245,4 +245,42 @@ uvicorn alarm_simulator.main:app --port 8000    # terminal 1
 make contract                                    # terminal 2
 ```
 
-Requires `npm install -g newman`.
+Requires `npm install -g newman`. An environment file is provided so the collections can
+be run individually:
+
+```bash
+newman run postman/chaining/Alarm-API-Chaining.postman_collection.json \
+  -e test-data/local.postman_environment.json
+```
+
+### 9.1 What the collections actually assert
+
+Worth stating plainly, because "newman is green" means different things per collection:
+
+| Collection | Requests | `pm.test` assertions |
+|---|---:|---:|
+| `Alarm-API-Simulator` (baseline) | 15 | 3 |
+| `scenarios/Alarm-API-Scenarios` | 15 | 3 |
+| `chaining/Alarm-API-Chaining` | 32 | **0** |
+
+The chaining collection carries no assertions of its own — its scripts only call
+`pm.collectionVariables.set(...)` to thread ids between requests. So a green run there
+proves every request was accepted and every chained variable resolved, **not** that the
+results were non-empty. That gap is why
+`tests/unit/test_simulator_seed.py::test_chaining_preconditions_hold_through_the_api`
+exists: it asserts through the API that each of the four chaining flows returns
+non-empty results, which is the property the collection demonstrates but never checks.
+
+### 9.2 Proving the gate can fail
+
+A passing contract run only means something if the runner can fail. `test-data/` holds a
+negative-control collection that asserts three things that are deliberately false against
+a correct simulator:
+
+```bash
+newman run test-data/Negative-Control.postman_collection.json \
+  -e test-data/local.postman_environment.json
+# expected: 3 assertions, 3 failed, exit code 1
+```
+
+If that collection ever passes, the green ticks on the real ones are worthless.
