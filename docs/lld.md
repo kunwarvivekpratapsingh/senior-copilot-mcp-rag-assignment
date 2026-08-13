@@ -334,10 +334,56 @@ _Pending — Steps 4, 6, 7._
 
 ## 8. Error taxonomy
 
-One table mapping source condition → typed exception → MCP `error_code` → HTTP status →
-user-visible message → GUI treatment → whether it is retried.
+Every failure crossing a boundary is classified once and carried unchanged from there.
 
-_Pending — Step 3._
+| Source condition | HTTP | Connector exception | MCP `error_code` | Retried? | Orchestrator response |
+|---|---:|---|---|:---:|---|
+| Missing / malformed / wrong bearer token | 401 | `AlarmApiAuthError` | `AUTH_FAILED` | No | Abort the run; this is configuration, not data |
+| Unknown asset, alarm, or calculation | 404 | `AlarmApiNotFound` | `NOT_FOUND` | No | Mark the step failed; continue independent steps |
+| Failed validation upstream | 400 / 422 | `AlarmApiInvalidInput` | `INVALID_INPUT` | No | Mark failed; do not re-issue the same arguments |
+| Source system fault | 5xx | `AlarmApiUpstreamError` | `UPSTREAM_5XX` | **Yes**, ×2 | Degrade the step; state the gap in the answer |
+| Deadline exceeded / connection refused | — | `AlarmApiTimeout` | `TIMEOUT` | **Yes**, ×2 | Degrade the step; state the gap in the answer |
+| Defect in the MCP server itself | — | — | `INTERNAL_ERROR` | No | Mark failed; do not blame the source system |
+
+### 8.1 Why the retry column is split this way
+
+Retrying is only correct when a retry could plausibly succeed. A 400 will fail
+identically on the second attempt, so retrying spends the caller's deadline to reach
+the same answer. A 401 is worse: retrying converts an obvious configuration error into
+a slow one. Only 5xx and connection failures are transient, so only they are retried —
+twice, with exponential backoff from 0.25 s.
+
+`test_does_not_retry_a_400`, `test_does_not_retry_a_401`, and
+`test_does_not_retry_a_404` assert the negative cases directly, because a too-eager
+retry policy fails silently rather than loudly.
+
+### 8.2 How the code survives the boundary
+
+The MCP SDK wraps whatever a tool raises in its own `ToolError`, discarding custom
+attributes. So the contract is carried **in the message**, as a machine-readable
+prefix:
+
+```
+[TIMEOUT] ConnectTimeout contacting the Alarm Management API (trace_id=trace-abc123)
+```
+
+`parse_error_code()` recovers `("TIMEOUT", "ConnectTimeout contacting…")` on the client
+side. An unrecognised or absent prefix classifies as `INTERNAL_ERROR` rather than
+raising, so an unexpected failure is still handled rather than crashing the caller.
+
+This is why the orchestrator can branch on *why* a step failed without matching prose —
+and why rewording a message cannot break error handling.
+
+### 8.3 Secret redaction
+
+Structured logging applies redaction as a **processor**, not at each call site:
+anything matching a bearer token, an `sk-ant-` key, or a `ghp_` token is replaced
+before a record renders, and any field named `token`, `api_key`, `authorization`,
+`password`, or `secret` is masked wholesale. "Remember not to log the token" is not a
+control; a processor is.
+
+`test_token_never_appears_in_an_exception` covers the highest-risk path, since an
+exception is the thing most likely to reach a log or a user.
 
 ---
 
