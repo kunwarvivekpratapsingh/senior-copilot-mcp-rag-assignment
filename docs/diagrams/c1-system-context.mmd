@@ -1,0 +1,27 @@
+%% C4 Level 1 — System context.
+%% What the system is, who uses it, and what it depends on.
+flowchart TB
+    operator(["Plant operator<br/><i>asks questions about alarms</i>"])
+    engineer(["Reliability engineer<br/><i>reviews recurring alarms</i>"])
+
+    subgraph system["Multi-MCP Enterprise Operations Copilot"]
+        copilot["Answers operations questions by combining<br/>live alarm data with operating procedures,<br/>and shows its evidence and tool trace"]
+    end
+
+    anthropic["Anthropic API<br/><i>planning and answer composition</i>"]
+    github["GitHub<br/><i>issue search and creation</i><br/><i>mocked by default</i>"]
+    alarms["Alarm Management API<br/><i>built for this assignment from</i><br/><i>the Postman specification</i>"]
+
+    operator -->|"asks a question,<br/>approves writes"| copilot
+    engineer -->|"reviews findings"| copilot
+    copilot -->|"plan + compose<br/>HTTPS"| anthropic
+    copilot -->|"read alarms and assets<br/>HTTPS + bearer"| alarms
+    copilot -->|"draft and create issues<br/>HTTPS + token"| github
+
+    classDef person fill:#EEEDFE,stroke:#534AB7,color:#26215C
+    classDef sys fill:#E1F5EE,stroke:#0F6E56,color:#04342C
+    classDef ext fill:#F1EFE8,stroke:#5F5E5A,color:#2C2C2A
+
+    class operator,engineer person
+    class copilot sys
+    class anthropic,github,alarms ext

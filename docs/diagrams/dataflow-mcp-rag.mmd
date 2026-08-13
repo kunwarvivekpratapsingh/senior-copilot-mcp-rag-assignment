@@ -1,0 +1,44 @@
+%% Data flow for the mandatory acceptance scenario.
+%% The point of this diagram: the MCP path and the RAG path are two branches of
+%% ONE workflow that converge in the composer. The brief treats them being
+%% demonstrated separately as an incomplete submission.
+flowchart TB
+    q["Operator question<br/><i>Recurring high-severity alarms<br/>on Boiler Feed Pump 101?</i>"]
+    plan["Planner<br/>reads the live tool registry,<br/>emits a typed plan"]
+
+    subgraph mcppath["MCP path — structured evidence"]
+        direction TB
+        s1["1 · search_assets<br/><i>name to asset_id</i>"]
+        s2["2 · get_alarm_summary<br/><i>counts, recurring rate</i>"]
+        s3["3 · get_alarm_correlation<br/><i>contributing factors</i>"]
+        s4["4 · get_rationalization_candidates<br/><i>confirms the pattern</i>"]
+        s1 -->|"asset_id"| s2 --> s3 --> s4
+    end
+
+    subgraph ragpath["RAG path — unstructured evidence"]
+        direction TB
+        r1["5 · Hybrid retrieval<br/><i>filtered by asset_tags</i>"]
+        r2["Cited passages, ranked<br/><i>below-threshold results rejected</i>"]
+        r1 --> r2
+    end
+
+    comp["Composer<br/>every claim carries a<br/>tool or source marker"]
+    answer["Grounded answer<br/>+ execution trace<br/>+ evidence panel"]
+
+    q --> plan
+    plan --> s1
+    plan --> r1
+    s1 -.->|"asset_id narrows<br/>the retrieval filter"| r1
+    s4 --> comp
+    r2 --> comp
+    comp --> answer
+
+    classDef mcp fill:#E1F5EE,stroke:#0F6E56,color:#04342C
+    classDef rag fill:#FAECE7,stroke:#993C1D,color:#4A1B0C
+    classDef neutral fill:#F1EFE8,stroke:#5F5E5A,color:#2C2C2A
+    classDef orch fill:#EEEDFE,stroke:#534AB7,color:#26215C
+
+    class s1,s2,s3,s4 mcp
+    class r1,r2 rag
+    class q,answer neutral
+    class plan,comp orch
