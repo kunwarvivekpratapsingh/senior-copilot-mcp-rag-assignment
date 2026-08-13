@@ -271,6 +271,77 @@ document is flagged when retrieved.
 The BM25 index is built lazily from the persisted chunks on first query and cached for
 the process lifetime, because rebuilding it per query would dominate retrieval latency.
 
+## 10a · Example retrieved chunks and citations
+
+The acceptance-scenario query, filtered to `asset="Boiler Feed Pump 101"`, returns these
+five passages. `score` is the fused rank position the evidence panel displays;
+`similarity` is the absolute relevance the confidence threshold reads (§8.2) — the two
+differ substantially, which is the whole point of keeping them apart.
+
+| Rank | `score` | `similarity` | Document | Section | Citation emitted |
+|---:|---:|---:|---|---|---|
+| 1 | 0.99 | 0.41 | BFP 101 Operating Procedure | The recurring pair: discharge pressure low with suction strainer differential high | `[source: OP-BFP-101#the-recurring-pair-discharge-pressure-low-with-suction-strainer-]` |
+| 2 | 0.99 | 0.40 | BFP 101 Operating Procedure | Scope | `[source: OP-BFP-101#scope]` |
+| 3 | 0.97 | 0.39 | BFP 101 Operating Procedure | Abnormal condition: suction strainer differential high | `[source: OP-BFP-101#abnormal-condition-suction-strainer-differential-high]` |
+| 4 | 0.95 | 0.34 | BFP 101 Operating Procedure | Escalation | `[source: OP-BFP-101#escalation]` |
+| 5 | 0.94 | 0.37 | Recurring High-Severity Alarm Troubleshooting | 2. Setpoint too tight for actual duty | `[source: TS-RECUR#2-setpoint-too-tight-for-actual-duty]` |
+
+`best_score = 0.52`, comfortably above the 0.35 threshold, so `low_confidence = false`.
+Note that 0.52 exceeds every individual `similarity`: coverage is measured against the
+union of the returned passages, because a question this long spreads its terms across
+several of them (§8.3).
+
+One chunk in full, as stored — note the contextual header (§4.2) prefixing the body:
+
+```text
+Boiler Feed Pump 101 Operating Procedure — Abnormal condition: suction strainer
+differential high
+
+1. Confirm the reading against the local gauge; a failed transmitter presents
+   identically to a fouled strainer.
+2. If genuine, switch to the standby strainer where fitted and clean the affected
+   element.
+3. Verify that discharge pressure recovers after cleaning. This step is what confirms
+   the two conditions were related rather than coincidental.
+4. Record the interval since the last clean. A shortening interval indicates a change
+   in feedwater quality and should be raised with the water treatment group.
+```
+
+Its metadata record:
+
+```json
+{
+  "chunk_id": "OP-BFP-101#abnormal-condition-suction-strainer-differential-high:0",
+  "doc_id": "OP-BFP-101",
+  "title": "Boiler Feed Pump 101 Operating Procedure",
+  "doc_type": "operating_procedure",
+  "section": "Abnormal condition: suction strainer differential high",
+  "section_anchor": "abnormal-condition-suction-strainer-differential-high",
+  "citation": "OP-BFP-101#abnormal-condition-suction-strainer-differential-high",
+  "asset_tags": "|Boiler Feed Pump 101|Boiler Feed Pump 102|",
+  "unit": "Unit 2",
+  "site": "NorthPlant",
+  "last_reviewed": "2026-03-14",
+  "version": "4.2",
+  "source_path": "rag/documents/OP-BFP-101-operating-procedure.md"
+}
+```
+
+And how it appears in the answer — the marker is copied verbatim from `citation`, which
+is what makes `verify_citations()` able to check it:
+
+```text
+**Boiler Feed Pump 101 Operating Procedure — Abnormal condition: suction strainer
+differential high** [source: OP-BFP-101#abnormal-condition-suction-strainer-differential-high]
+```
+
+Reproduce with:
+
+```bash
+python -m rag.ingestion.cli --docs ./rag/documents --reset
+python scripts/retrieval_demo.py
+```
+
 ## 11 · Measured behaviour
 
 | Property | Value |

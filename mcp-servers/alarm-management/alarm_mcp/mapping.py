@@ -107,6 +107,10 @@ def tool_errors(
                     mcp_server="alarm-management",
                     mcp_tool=tool_name,
                     error_code=error.error_code,
+                    # The upstream status, when the failure came from the API rather
+                    # than from us. It is the field that separates "the source system
+                    # rejected this" from "we never reached it".
+                    api_status_code=getattr(exc, "status_code", None),
                     duration_ms=round((time.perf_counter() - started) * 1000, 2),
                     trace_id=error.trace_id,
                     outcome="error",

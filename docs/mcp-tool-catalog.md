@@ -208,7 +208,7 @@ Step two of two — requires a calculation_id from generate_calculation.
 ```json
 {
   "arguments": {
-    "calculation_id": "CALC-24438d18bf85"
+    "calculation_id": "CALC-1f676cfb335f"
   },
   "tool": "execute_calculation"
 }
@@ -218,7 +218,7 @@ Step two of two — requires a calculation_id from generate_calculation.
 
 ```json
 {
-  "calculation_id": "CALC-24438d18bf85",
+  "calculation_id": "CALC-1f676cfb335f",
   "calculation_type": "operator_response_efficiency",
   "columns": [
     "metric",
@@ -227,7 +227,7 @@ Step two of two — requires a calculation_id from generate_calculation.
   "interpretation": "26.8% of acknowledged alarms were answered within 300 seconds.",
   "meta": {
     "source": "alarm-management-api",
-    "trace_id": "trace-d13bbe91c30e"
+    "trace_id": "trace-be9bf2eec364"
   },
   "rows": [
     [
@@ -418,9 +418,9 @@ Step one of two. This registers the calculation and returns a calculation_id;
 {
   "arguments": {
     "calculation_type": "operator_response_efficiency",
-    "end_time": "2026-08-13T13:59:48.916104+00:00",
+    "end_time": "2026-08-13T19:50:34.148472+00:00",
     "site": "SouthPlant",
-    "start_time": "2026-05-15T13:59:48.916104+00:00"
+    "start_time": "2026-05-15T19:50:34.148472+00:00"
   },
   "tool": "generate_calculation"
 }
@@ -430,12 +430,12 @@ Step one of two. This registers the calculation and returns a calculation_id;
 
 ```json
 {
-  "calculation_id": "CALC-ff0d9655e86e",
+  "calculation_id": "CALC-fe743010fb31",
   "calculation_type": "operator_response_efficiency",
   "generated_code": "def operator_response_efficiency(alarms, prompt_seconds=300):\n    \"\"\"Share of acknowledged alarms answered within the prompt threshold.\"\"\"\n    acked = [a for a in alarms if a.ack_delay_seconds is not None]\n    prompt = [a for a in acked if a.ack_delay_seconds <= prompt_seconds]\n    return len(prompt) / len(acked) if acked else 0.0",
   "meta": {
     "source": "alarm-management-api",
-    "trace_id": "trace-7bc34e9d88b6"
+    "trace_id": "trace-d0936320551d"
   }
 }
 ```
@@ -695,14 +695,14 @@ Returns the process value that triggered it and the setpoint it crossed, the
     "operator_id": null,
     "setpoint": 98.8,
     "severity": "high",
-    "start_time": "2026-08-13T10:59:48.157382",
+    "start_time": "2026-08-13T16:50:33.328462",
     "status": "active",
     "unit_of_measure": "barg",
     "value": 127.9
   },
   "meta": {
     "source": "alarm-management-api",
-    "trace_id": "trace-573a7af29da5"
+    "trace_id": "trace-fd0c2a02012f"
   }
 }
 ```
@@ -949,9 +949,9 @@ The primary tool for 'what is causing this' and 'what else happens at the same
     "asset_ids": [
       "AST-0005"
     ],
-    "end_time": "2026-08-13T13:59:48.916104+00:00",
+    "end_time": "2026-08-13T19:50:34.148472+00:00",
     "min_support": 3,
-    "start_time": "2026-05-15T13:59:48.916104+00:00"
+    "start_time": "2026-05-15T19:50:34.148472+00:00"
   },
   "tool": "get_alarm_correlation"
 }
@@ -965,7 +965,7 @@ The primary tool for 'what is causing this' and 'what else happens at the same
   "lag_window_minutes": 15,
   "meta": {
     "source": "alarm-management-api",
-    "trace_id": "trace-75f88b0a671d"
+    "trace_id": "trace-25302a49ef33"
   },
   "pairs": [
     {
@@ -1271,7 +1271,7 @@ The main tool for 'how often', 'how many', and 'which alarm dominates'. Grouping
     "asset_ids": [
       "AST-0005"
     ],
-    "end_time": "2026-08-13T13:59:48.916104+00:00",
+    "end_time": "2026-08-13T19:50:34.148472+00:00",
     "group_by": [
       "alarm_name"
     ],
@@ -1283,7 +1283,7 @@ The main tool for 'how often', 'how many', and 'which alarm dominates'. Grouping
       "high",
       "critical"
     ],
-    "start_time": "2026-05-15T13:59:48.916104+00:00"
+    "start_time": "2026-05-15T19:50:34.148472+00:00"
   },
   "tool": "get_alarm_summary"
 }
@@ -1351,7 +1351,7 @@ The main tool for 'how often', 'how many', and 'which alarm dominates'. Grouping
   ],
   "meta": {
     "source": "alarm-management-api",
-    "trace_id": "trace-2aa863c2cfca"
+    "trace_id": "trace-7790843f7339"
   },
   "total_alarms": 94
 }
@@ -1569,11 +1569,11 @@ Use when the question is about direction — is this getting worse, did it chang
       "AST-0005"
     ],
     "bucket": "daily",
-    "end_time": "2026-08-13T13:59:48.916104+00:00",
+    "end_time": "2026-08-13T19:50:34.148472+00:00",
     "metrics": [
       "alarm_count"
     ],
-    "start_time": "2026-05-15T13:59:48.916104+00:00"
+    "start_time": "2026-05-15T19:50:34.148472+00:00"
   },
   "tool": "get_alarm_trends"
 }
@@ -1586,19 +1586,13 @@ Use when the question is about direction — is this getting worse, did it chang
   "bucket": "daily",
   "meta": {
     "source": "alarm-management-api",
-    "trace_id": "trace-8558dbbe8cf1"
+    "trace_id": "trace-ba21de49dacf"
   },
   "points": [
     {
-      "bucket_start": "2026-05-16T00:00:00Z",
-      "metrics": {
-        "alarm_count": 1.0
-      }
-    },
-    {
       "bucket_start": "2026-05-17T00:00:00Z",
       "metrics": {
-        "alarm_count": 3.0
+        "alarm_count": 4.0
       }
     },
     {
@@ -1610,49 +1604,55 @@ Use when the question is about direction — is this getting worse, did it chang
     {
       "bucket_start": "2026-05-20T00:00:00Z",
       "metrics": {
-        "alarm_count": 3.0
+        "alarm_count": 2.0
       }
     },
     {
       "bucket_start": "2026-05-21T00:00:00Z",
       "metrics": {
-        "alarm_count": 2.0
-      }
-    },
-    {
-      "bucket_start": "2026-05-22T00:00:00Z",
-      "metrics": {
-        "alarm_count": 2.0
+        "alarm_count": 3.0
       }
     },
     {
       "bucket_start": "2026-05-23T00:00:00Z",
       "metrics": {
-        "alarm_count": 1.0
+        "alarm_count": 3.0
       }
     },
     {
       "bucket_start": "2026-05-26T00:00:00Z",
       "metrics": {
-        "alarm_count": 4.0
+        "alarm_count": 3.0
       }
     },
     {
       "bucket_start": "2026-05-27T00:00:00Z",
       "metrics": {
-        "alarm_count": 1.0
+        "alarm_count": 2.0
       }
     },
     {
       "bucket_start": "2026-05-28T00:00:00Z",
       "metrics": {
-        "alarm_count": 4.0
+        "alarm_count": 1.0
+      }
+    },
+    {
+      "bucket_start": "2026-05-29T00:00:00Z",
+      "metrics": {
+        "alarm_count": 3.0
       }
     },
     {
       "bucket_start": "2026-05-30T00:00:00Z",
       "metrics": {
         "alarm_count": 1.0
+      }
+    },
+    {
+      "bucket_start": "2026-05-31T00:00:00Z",
+      "metrics": {
+        "alarm_count": 3.0
       }
     },
     {
@@ -2060,24 +2060,24 @@ Use when the question is about specific alarm occurrences — 'what is active ri
       "operator_id": null,
       "setpoint": 98.8,
       "severity": "high",
-      "start_time": "2026-08-13T10:59:48.157382",
+      "start_time": "2026-08-13T16:50:33.328462",
       "status": "active",
       "unit_of_measure": "barg",
       "value": 127.9
     },
     {
       "ack_delay_seconds": 592,
-      "ack_time": "2026-08-13T06:55:03.157382",
+      "ack_time": "2026-08-13T12:45:48.328462",
       "alarm_id": "ALM-01542",
       "alarm_name": "Bearing Temperature High",
       "alarm_type": "process",
       "asset_id": "AST-0005",
       "asset_name": "Boiler Feed Pump 101",
-      "end_time": "2026-08-13T08:38:11.157382",
+      "end_time": "2026-08-13T14:28:56.328462",
       "operator_id": "OP-009",
       "setpoint": 87.8,
       "severity": "high",
-      "start_time": "2026-08-13T06:45:11.157382",
+      "start_time": "2026-08-13T12:35:56.328462",
       "status": "cleared",
       "unit_of_measure": "degC",
       "value": 139.6
@@ -2086,7 +2086,7 @@ Use when the question is about specific alarm occurrences — 'what is active ri
   "has_next": true,
   "meta": {
     "source": "alarm-management-api",
-    "trace_id": "trace-4b6e3bc603b7"
+    "trace_id": "trace-342141dfc5a6"
   },
   "page": 1,
   "page_size": 2,
@@ -2264,12 +2264,12 @@ Use when the answer depends on what the equipment *is* — its criticality,
   "asset_name": "Boiler Feed Pump 101",
   "asset_type": "pump",
   "criticality": "high",
-  "install_date": "2021-11-30T13:59:48.157382",
-  "last_maintenance": "2025-09-24T13:59:48.157382",
+  "install_date": "2021-11-30T19:50:33.328462",
+  "last_maintenance": "2025-09-24T19:50:33.328462",
   "manufacturer": "Emerson",
   "meta": {
     "source": "alarm-management-api",
-    "trace_id": "trace-4c3c809d061d"
+    "trace_id": "trace-57b5e6c13d08"
   },
   "model": "PUM-4536",
   "site": "NorthPlant",
@@ -2511,9 +2511,9 @@ Alarm flooding is a recognised failure mode: during a flood the operator cannot
 ```json
 {
   "arguments": {
-    "end_time": "2026-08-13T13:59:48.916104+00:00",
+    "end_time": "2026-08-13T19:50:34.148472+00:00",
     "rolling_window_minutes": 10,
-    "start_time": "2026-05-15T13:59:48.916104+00:00",
+    "start_time": "2026-05-15T19:50:34.148472+00:00",
     "threshold_count": 10,
     "unit": "Unit 2"
   },
@@ -2537,9 +2537,9 @@ Alarm flooding is a recognised failure mode: during a flood the operator cannot
         "AST-0010"
       ],
       "dominant_alarm_name": "Motor Current High",
-      "end": "2026-07-16T01:06:50.157382Z",
+      "end": "2026-07-16T06:57:35.328462Z",
       "peak_rate_per_minute": 4.15,
-      "start": "2026-07-16T01:00:34.157382Z"
+      "start": "2026-07-16T06:51:19.328462Z"
     },
     {
       "alarm_count": 26,
@@ -2552,9 +2552,9 @@ Alarm flooding is a recognised failure mode: during a flood the operator cannot
         "AST-0010"
       ],
       "dominant_alarm_name": "Bearing Temperature High",
-      "end": "2026-08-03T08:07:43.157382Z",
+      "end": "2026-08-03T13:58:28.328462Z",
       "peak_rate_per_minute": 3.37,
-      "start": "2026-08-03T08:00:00.157382Z"
+      "start": "2026-08-03T13:50:45.328462Z"
     },
     {
       "alarm_count": 18,
@@ -2567,9 +2567,9 @@ Alarm flooding is a recognised failure mode: during a flood the operator cannot
         "AST-0010"
       ],
       "dominant_alarm_name": "Vibration High",
-      "end": "2026-06-28T03:07:38.157382Z",
+      "end": "2026-06-28T08:58:23.328462Z",
       "peak_rate_per_minute": 2.43,
-      "start": "2026-06-28T03:00:14.157382Z"
+      "start": "2026-06-28T08:50:59.328462Z"
     },
     {
       "alarm_count": 17,
@@ -2581,7 +2581,7 @@ Alarm flooding is a recognised failure mode: during a flood the operator cannot
         "AST-0010"
       ],
       "dominant_alarm_name": "Vibration High",
-      "end": "2026-06-10T06:07:26.15738
+      "end": "2026-06-10T11:58:11.32846
   … truncated for the catalog
 ```
 
@@ -3178,8 +3178,8 @@ Each action carries a rationale and its expected outcome, so the advice can be
     "asset_name": "Boiler Feed Pump 101",
     "asset_type": "pump",
     "criticality": "high",
-    "install_date": "2021-11-30T13:59:48.157382",
-    "last_maintenance": "2025-09-24T13:59:48.157382",
+    "install_date": "2021-11-30T19:50:33.328462",
+    "last_maintenance": "2025-09-24T19:50:33.328462",
     "manufacturer": "Emerson",
     "model": "PUM-4536",
     "site": "NorthPlant",
@@ -3189,7 +3189,7 @@ Each action carries a rationale and its expected outcome, so the advice can be
   "historical_pattern": null,
   "meta": {
     "source": "alarm-management-api",
-    "trace_id": "trace-e2913002a093"
+    "trace_id": "trace-1ba5b009c382"
   },
   "relate
   … truncated for the catalog
@@ -3388,7 +3388,7 @@ Combines alarm severity, asset criticality, how often the alarm recurs, and how
   ],
   "meta": {
     "source": "alarm-management-api",
-    "trace_id": "trace-45ec36fa3b23"
+    "trace_id": "trace-7f0178023027"
   },
   "priority_score": 73.33
 }
@@ -3624,9 +3624,9 @@ Two independent triggers, and the distinction matters because they call for
     "asset_ids": [
       "AST-0005"
     ],
-    "end_time": "2026-08-13T13:59:48.916104+00:00",
+    "end_time": "2026-08-13T19:50:34.148472+00:00",
     "recurrence_threshold": 5,
-    "start_time": "2026-05-15T13:59:48.916104+00:00"
+    "start_time": "2026-05-15T19:50:34.148472+00:00"
   },
   "tool": "get_rationalization_candidates"
 }
@@ -3854,7 +3854,7 @@ Start here for any question that names equipment. Almost every other tool needs
   "count": 1,
   "meta": {
     "source": "alarm-management-api",
-    "trace_id": "trace-98c8e9b1433c"
+    "trace_id": "trace-e6d286ea6b53"
   },
   "query": "Boiler Feed Pump 101",
   "results": [

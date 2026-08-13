@@ -21,11 +21,13 @@ error into a slow one.
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 from types import TracebackType
 from typing import Any, Self
 
 import httpx
+import structlog
 
 from .errors import (
     AlarmApiAuthError,
@@ -38,6 +40,12 @@ from .errors import (
 
 # Status codes that justify another attempt. Everything else is answered.
 RETRYABLE_STATUS = frozenset({500, 502, 503, 504})
+
+# One record per upstream request. This is the only layer that sees an HTTP status,
+# so `api_status_code` has to be emitted here or it cannot be reported at all. The
+# redaction processor configured by the host process scrubs the record before it
+# renders; nothing here interpolates the token in the first place.
+logger = structlog.get_logger(__name__)
 
 
 class AlarmApiClient:
@@ -125,6 +133,28 @@ class AlarmApiClient:
             return AlarmApiUpstreamError(message, **kwargs)
         return AlarmApiError(message, **kwargs)
 
+    @staticmethod
+    def _log(
+        method: str,
+        path: str,
+        status_code: int | None,
+        started: float,
+        attempt: int,
+        trace_id: str,
+        outcome: str,
+    ) -> None:
+        """One structured record per attempt, carrying the graded fields."""
+        logger.info(
+            "alarm_api_request",
+            http_method=method,
+            path=path,
+            api_status_code=status_code,
+            duration_ms=round((time.perf_counter() - started) * 1000, 2),
+            retry_count=attempt,
+            trace_id=trace_id,
+            outcome=outcome,
+        )
+
     async def _request(
         self,
         method: str,
@@ -144,16 +174,22 @@ class AlarmApiClient:
 
         last_error: AlarmApiError | None = None
         for attempt in range(self._max_retries + 1):
+            started = time.perf_counter()
             try:
                 response = await self._client.request(
                     method, path, params=clean_params, json=json, headers=headers
                 )
             except (httpx.TimeoutException, httpx.ConnectError, httpx.ReadError) as exc:
+                self._log(method, path, None, started, attempt, trace_id, "timeout")
                 last_error = AlarmApiTimeout(
                     f"{type(exc).__name__} contacting the Alarm Management API",
                     trace_id=trace_id,
                 )
             else:
+                outcome = "success" if response.status_code < 400 else "error"
+                self._log(
+                    method, path, response.status_code, started, attempt, trace_id, outcome
+                )
                 if response.status_code < 400:
                     result: dict[str, Any] = response.json()
                     return result

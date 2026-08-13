@@ -294,6 +294,11 @@ VOLATILE = [
     (re.compile(r"\d{4}-\d{2}-\d{2}T[\d:.+\-Z]+"), "<TIMESTAMP>"),
     (re.compile(r"trace-[0-9a-f]{6,}"), "trace-<ID>"),
     (re.compile(r"CALC-[0-9A-Za-z]+"), "CALC-<ID>"),
+    # The examples resolve "the most recent alarm", and the seeded window slides with
+    # the current date — so this id changes by the day while nothing about the contract
+    # does. Asset ids are NOT normalised: those are fixed by the seed, and a change in
+    # one would mean the seed generator moved.
+    (re.compile(r"ALM-\d+"), "ALM-<ID>"),
     (re.compile(r'"number": \d+'), '"number": <N>'),
     (re.compile(r'"(url|html_url)": "[^"]*"'), r'"\1": "<URL>"'),
 ]

@@ -14,6 +14,9 @@ flow from user prompt to final grounded answer**. For the full system-level desi
 | [`api-integration.md`](api-integration.md) | What is the Alarm Management API contract? |
 | [`design-decisions.md`](design-decisions.md) | What implementation choices were made and why? |
 | [`known-limitations.md`](known-limitations.md) | What does this deliberately not do? |
+| [`future-improvements.md`](future-improvements.md) | What would come next, and in what order? |
+| [`coverage.md`](coverage.md) | How much is tested, and what is deliberately not? |
+| [`demo.md`](demo.md) | What does the recorded walkthrough show? |
 
 ---
 

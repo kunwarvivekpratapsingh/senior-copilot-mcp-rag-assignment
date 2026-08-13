@@ -12,6 +12,7 @@ from __future__ import annotations
 import httpx
 import pytest
 import respx
+import structlog.testing
 from alarm_api import (
     AlarmApiAuthError,
     AlarmApiClient,
@@ -240,6 +241,51 @@ class TestErrorTranslation:
             with pytest.raises(AlarmApiUpstreamError) as caught:
                 await client.health()
         assert "Bad Gateway" in caught.value.message
+
+
+# --------------------------------------------------------------------------- #
+# Observability — FR-26, guidelines §16
+# --------------------------------------------------------------------------- #
+
+
+class TestRequestLogging:
+    @respx.mock
+    async def test_a_successful_request_logs_the_graded_fields(self) -> None:
+        """`api_status_code` is on the graded field list, and this is the only layer
+        that ever sees an HTTP status — so if it is not emitted here it cannot be
+        reported anywhere."""
+        respx.get(f"{BASE_URL}/health").mock(return_value=httpx.Response(200, json={}))
+        with structlog.testing.capture_logs() as records:
+            async with make_client() as client:
+                await client.health()
+
+        record = next(r for r in records if r["event"] == "alarm_api_request")
+        assert record["api_status_code"] == 200
+        assert record["outcome"] == "success"
+        assert record["retry_count"] == 0
+        assert record["trace_id"]
+        assert record["duration_ms"] >= 0
+
+    @respx.mock
+    async def test_a_failed_request_logs_its_status_and_every_attempt(self) -> None:
+        respx.get(f"{BASE_URL}/health").mock(return_value=httpx.Response(503, json={}))
+        with structlog.testing.capture_logs() as records:
+            async with make_client() as client:
+                with pytest.raises(AlarmApiUpstreamError):
+                    await client.health()
+
+        attempts = [r for r in records if r["event"] == "alarm_api_request"]
+        assert [r["api_status_code"] for r in attempts] == [503, 503, 503]
+        assert [r["retry_count"] for r in attempts] == [0, 1, 2]
+        assert all(r["outcome"] == "error" for r in attempts)
+
+    @respx.mock
+    async def test_the_token_never_reaches_a_log_record(self) -> None:
+        respx.get(f"{BASE_URL}/health").mock(return_value=httpx.Response(200, json={}))
+        with structlog.testing.capture_logs() as records:
+            async with make_client() as client:
+                await client.health()
+        assert TOKEN not in str(records)
 
 
 # --------------------------------------------------------------------------- #

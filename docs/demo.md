@@ -5,7 +5,11 @@ happy path shows the system working, and the failure path shows it failing hones
 which is the harder property to demonstrate and the one the submission guidelines name
 repeatedly.
 
-> **Recording:** `docs/demo.mp4` (or the link in the submission form).
+> **Recording:** `docs/demo.mp4` (or the link in the README).
+
+Still images of each state are in [`screenshots/`](screenshots), regenerated with
+`make screenshots` against a running stack — so they cannot drift from the product the
+way hand-taken screenshots do.
 
 ## Setup
 

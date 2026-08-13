@@ -68,7 +68,7 @@ runs all three collections against it; CI does the same on every push.
 | Retrieval | Chroma (embedded) + `rank-bm25`, fused by reciprocal rank |
 | Frontend | React 18 + TypeScript (Vite), nginx in the image |
 | Packaging | Docker Compose (5 services), GitHub Actions CI |
-| Quality | pytest (260 tests, 89% coverage), ruff incl. security rules, mypy, newman contract checks |
+| Quality | pytest (269 tests, 89% coverage), ruff incl. security rules, mypy, newman contract checks |
 
 ## 4 · Architecture summary
 
@@ -214,7 +214,8 @@ copilot_backend.api.app:app --port 8080` — and `npm run dev` in `apps/frontend
 
 `make contract` requires newman (`npm install -g newman`) and a running simulator.
 
-**260 tests, all passing, 89% line coverage.** What they cover:
+**269 tests, all passing, 89% line coverage** — breakdown in
+[`docs/coverage.md`](docs/coverage.md). What they cover:
 
 | Area | Examples |
 | --- | --- |
@@ -224,7 +225,7 @@ copilot_backend.api.app:app --port 8080` — and `npm run dev` in `apps/frontend
 | MCP server | Discovery, schema validation, auth headers, error mapping, trace propagation |
 | MCP client | Connectivity, invalid arguments rejected pre-network, unknown tool, partial failure, degraded server |
 | RAG | Ingestion, chunking, metadata, filtering, citations, low confidence, **prompt injection** |
-| Orchestration | Chaining, RAG in the same workflow, skipped dependents, pruned hallucinated tools, write approval |
+| Orchestration | Chaining, RAG in the same workflow, skipped dependents, pruned hallucinated tools, conflicting evidence, write approval |
 | LLM providers | Plan typing, cache-breakpoint placement, removed sampling params, **`stop_reason == "refusal"`** |
 | End-to-end | The acceptance scenario over HTTP, including "no secret appears anywhere in the response" |
 
@@ -302,17 +303,38 @@ import in `pyproject.toml`.
 6. **`docker compose up` is the supported path.** The manual path is documented in §8 but
    the compose file is what CI exercises.
 
-## 13 · Known limitations
+## 13 · Known limitations and future improvements
 
 Honest scope boundaries, each with what would be done differently with more time:
-[`docs/known-limitations.md`](docs/known-limitations.md).
+[`docs/known-limitations.md`](docs/known-limitations.md). What comes next, in the order I
+would do it: [`docs/future-improvements.md`](docs/future-improvements.md).
 
-## 14 · Demo video
+## 14 · Demo
 
-`docs/demo.md` describes the recorded walkthrough: the acceptance scenario end to end,
-tool discovery with schema inspection, the execution timeline, citation chips resolving
-to evidence, the write-confirmation gate, and then the failure path — the simulator is
-stopped mid-session to show retry, degraded answers, and honest gaps.
+### Screenshots
+
+Captured from the running stack by `make screenshots`, so they can be regenerated rather
+than going stale: [`docs/screenshots/`](docs/screenshots).
+
+| | |
+|---|---|
+| ![Execution timeline](docs/screenshots/04-execution-timeline.png) | ![Write confirmation](docs/screenshots/06-write-confirmation.png) |
+| **Execution timeline** — every step with its server, tool, duration, and status | **Write confirmation** — `create_issue` gated, showing the exact arguments |
+| ![Tool discovery](docs/screenshots/02-tool-discovery.png) | ![RAG evidence](docs/screenshots/05-rag-evidence.png) |
+| **Tool discovery** — 17 tools across two servers, with their JSON schemas | **RAG evidence** — retrieved passages with sections and scores |
+
+Also captured: [the empty state](docs/screenshots/01-empty-state.png) and
+[the answer with citation chips](docs/screenshots/03-answer-with-citations.png).
+
+### Video
+
+**Link:** _to be added — see [`docs/demo.md`](docs/demo.md) for the recorded walkthrough
+script._
+
+It covers the acceptance scenario end to end, tool discovery with schema inspection, the
+execution timeline, citation chips resolving to evidence, the write-confirmation gate,
+and then the failure path — the simulator is stopped mid-session to show retry, degraded
+answers, and honest gaps.
 
 ## License
 

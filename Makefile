@@ -10,7 +10,7 @@ PIP ?= $(PY) -m pip
 COMPOSE ?= docker compose
 
 .PHONY: help install lint format typecheck test test-unit test-integration test-e2e \
-        contract coverage ingest smoke up down logs ps docs clean
+        contract coverage ingest smoke up down logs ps docs screenshots clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -87,6 +87,9 @@ ps: ## Show service health
 docs: ## Regenerate the MCP tool catalog and export diagrams
 	$(PY) scripts/gen_tool_catalog.py
 	bash scripts/gen_diagrams.sh
+
+screenshots: ## Capture GUI screenshots (needs the stack running: make up)
+	node scripts/gen_screenshots.mjs
 
 clean: ## Remove caches and build artefacts
 	rm -rf .pytest_cache .mypy_cache .ruff_cache htmlcov .coverage coverage.xml dist build

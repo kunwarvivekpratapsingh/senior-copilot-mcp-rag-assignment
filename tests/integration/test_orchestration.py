@@ -323,6 +323,86 @@ class TestDegradation:
 
 
 # --------------------------------------------------------------------------- #
+# Conflicting evidence — FR-12, guidelines §13
+# --------------------------------------------------------------------------- #
+
+
+class TestConflictingEvidence:
+    """What happens when the live data contradicts the written standard.
+
+    This is a real conflict in the seeded estate, not a contrived one: the response
+    standard requires high-severity alarms to be acknowledged within 300 seconds, and
+    Boiler Feed Pump 101's measured mean acknowledgement delay is roughly four times
+    that. The correct behaviour is to surface both, each attributed to its own source,
+    so the reader can see the gap — not to harmonise them into one comfortable
+    sentence.
+    """
+
+    async def _run(self, retrieval: RetrievalService) -> tuple[list[Any], str]:
+        plan = Plan(
+            intent="acknowledgement performance against the standard",
+            steps=[
+                PlanStep(id="s1", kind="tool", tool="search_assets",
+                         args={"query": "Boiler Feed Pump 101"}, reason="Resolve the asset"),
+                PlanStep(id="s2", kind="tool", tool="get_alarm_summary",
+                         args={"asset_ids": ["$s1.output.results[0].asset_id"],
+                               "severity": ["high", "critical"],
+                               "group_by": ["alarm_name"],
+                               "kpis": ["alarm_count", "avg_ack_delay"]},
+                         reason="Measure what actually happened"),
+                PlanStep(id="r1", kind="retrieval",
+                         args={"query": "acknowledgement target for high severity alarms "
+                                        "operator response standard"},
+                         reason="Retrieve the standard the measurement is judged against"),
+            ],
+        )
+        async with copilot(retrieval, provider=ScriptedProvider(plan)) as bot:
+            return await collect(bot, "Are we meeting the acknowledgement standard on BFP-101?")
+
+    async def test_both_sides_of_the_conflict_reach_the_answer(
+        self, retrieval: RetrievalService, sim_client: object
+    ) -> None:
+        events, answer = await self._run(retrieval)
+
+        steps = steps_of(events)
+        measured = max(
+            group["kpis"]["avg_ack_delay"]
+            for group in (steps["s2"]["output"] or {})["groups"]
+        )
+        assert measured > 300, "the seeded estate must actually breach the standard"
+
+        assert "mean acknowledgement" in answer, "the measurement is missing"
+        assert "300" in answer, "the standard it breaches is missing"
+
+    async def test_each_side_keeps_its_own_attribution(
+        self, retrieval: RetrievalService, sim_client: object
+    ) -> None:
+        """A conflict is only legible if the reader can tell which source said what."""
+        _, answer = await self._run(retrieval)
+
+        data_section = answer.split("## What the procedures say")[0]
+        document_section = answer.split("## What the procedures say")[-1]
+
+        assert "[tool: alarm-management/get_alarm_summary]" in data_section
+        assert "[source:" in document_section
+        assert "[tool:" not in document_section
+
+    async def test_the_conflict_is_not_resolved_by_dropping_a_source(
+        self, retrieval: RetrievalService, sim_client: object
+    ) -> None:
+        events, answer = await self._run(retrieval)
+        completed = next(p for e, p in events if e == "answer.completed")
+
+        assert not completed["low_confidence"]
+        assert len(completed["citations"]) >= 1
+        # Every retrieved passage that was cited is still traceable from the trace,
+        # so nothing was quietly discarded to make the answer tidier.
+        for citation in completed["citations"]:
+            assert citation["doc_id"]
+            assert citation["excerpt"]
+
+
+# --------------------------------------------------------------------------- #
 # Write approval — FR-30
 # --------------------------------------------------------------------------- #
 

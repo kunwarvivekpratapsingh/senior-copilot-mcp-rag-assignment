@@ -48,6 +48,7 @@ switch ($Target) {
             @{ n = "logs";             d = "Tail logs from every service" },
             @{ n = "ps";               d = "Show service health" },
             @{ n = "docs";             d = "Regenerate tool catalog and diagrams" },
+            @{ n = "screenshots";      d = "Capture GUI screenshots; run 'up' first" },
             @{ n = "clean";            d = "Remove caches and build artefacts" }
         ) | ForEach-Object { "  {0,-18} {1}" -f $_.n, $_.d }
     }
@@ -78,6 +79,8 @@ switch ($Target) {
         Invoke-Step "Generating tool catalog" { & $PY scripts/gen_tool_catalog.py }
         Invoke-Step "Exporting diagrams"      { bash scripts/gen_diagrams.sh }
     }
+
+    "screenshots" { Invoke-Step "Capturing screenshots" { node scripts/gen_screenshots.mjs } }
 
     "clean" {
         Write-Host "==> Cleaning caches" -ForegroundColor Cyan
