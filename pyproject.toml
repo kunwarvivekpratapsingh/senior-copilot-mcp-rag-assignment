@@ -46,13 +46,23 @@ backend = [
     "jsonschema>=4.20",
 ]
 
-# rag/ — ingestion and retrieval
+# rag/ — ingestion and retrieval.
+# Chroma runs embedded in-process rather than as a separate service: the corpus is
+# small, and an embedded index removes a container, a network hop, and a failure
+# mode from the demo. Swapping to a hosted vector store is a config change.
 rag = [
     "chromadb>=0.5",
     "rank-bm25>=0.2.2",
-    "sentence-transformers>=3.0",
     "pypdf>=4.2",
     "python-frontmatter>=1.1",
+]
+
+# Optional upgrade: replaces the deterministic local embedder with a real sentence
+# transformer. Kept out of the default install because it pulls a multi-gigabyte ML
+# stack and downloads model weights, which would make a clean clone slow and
+# network-dependent. See docs/rag-design.md.
+rag-transformers = [
+    "sentence-transformers>=3.0",
 ]
 
 dev = [
