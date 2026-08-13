@@ -47,6 +47,12 @@ _ASSET_HINTS = re.compile(
 _UNIT = re.compile(r"\bunit\s*(\d+)\b", re.IGNORECASE)
 _SITE = re.compile(r"\b(northplant|southplant|eastrefinery|westterminal)\b", re.IGNORECASE)
 _DAYS = re.compile(r"\b(?:last|past)\s+(\d+)\s*(day|week|month)", re.IGNORECASE)
+# Distinguishes "draft an issue" from "file one". Drafting writes nothing and is
+# always safe; creating is a write, so it is only planned when actually requested.
+_WANTS_WRITE = re.compile(
+    r"\b(create|file|open|raise|submit|log)\b[\w\s]{0,20}\b(issue|ticket|work order)\b",
+    re.IGNORECASE,
+)
 
 ASSET_REF = "$s1.output.results[0].asset_id"
 ASSET_NAME_REF = "$s1.output.results[0].asset_name"
@@ -174,6 +180,7 @@ class RuleBasedProvider:
                  "include_asset_context": True, "include_historical_pattern": True},
                 "Gather the recommended response and its context")
         elif intent == "draft_issue":
+            subject = slots.get("asset_query") or slots.get("unit") or "the plant"
             add("s2", "get_alarm_summary",
                 {**asset_scope, **window, "severity": ["high", "critical"],
                  "group_by": ["alarm_name"], "kpis": ["alarm_count", "recurring_rate"]},
@@ -181,6 +188,31 @@ class RuleBasedProvider:
             add("s3", "search_issues",
                 {"query": slots.get("asset_query", "alarm"), "limit": 5},
                 "Check whether this is already tracked")
+            drafted = add(
+                "s4", "draft_issue",
+                {
+                    "title": f"Recurring high-severity alarms on {subject}",
+                    "summary": (
+                        f"{subject} raised repeated high-severity alarms over the last "
+                        f"{slots.get('days', 90)} days. The findings and the applicable "
+                        "procedure are cited below."
+                    ),
+                    # A whole-value placeholder, not an interpolation: the resolver
+                    # substitutes complete values, so the most frequent alarm name
+                    # arrives here from the summary step rather than being retyped.
+                    "evidence": ["$s2.output.groups[0].group.alarm_name"],
+                    "labels": ["operations", "alarm-rationalization"],
+                },
+                "Compose the issue text — a pure function that writes nothing",
+            )
+            # Only plan the write when the question actually asks for one. Drafting is
+            # safe and always useful; creating is not, and planning it speculatively
+            # would put a confirmation prompt in front of someone who never asked.
+            if drafted and _WANTS_WRITE.search(question):
+                add("s5", "create_issue",
+                    {"title": "$s4.output.title", "body": "$s4.output.body",
+                     "labels": ["operations", "alarm-rationalization"]},
+                    "Create the issue — requires explicit human approval")
         elif intent == "trend":
             add("s2", "get_alarm_trends",
                 {**asset_scope, **window, "bucket": "daily", "metrics": ["alarm_count"]},

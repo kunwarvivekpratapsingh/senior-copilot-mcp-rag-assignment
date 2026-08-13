@@ -188,6 +188,14 @@ the same target names.
 Ports: GUI `5173`, backend `8080`, simulator `8000` (exposed so the Postman collections
 can run against it), MCP servers `9000` / `9001` (internal).
 
+If one of those is already taken, override the host side in `.env` — the container ports
+never change. Set `VITE_API_BASE_URL` to match the backend port, because Vite inlines it
+into the GUI at build time:
+
+```bash
+BACKEND_HOST_PORT=8090 VITE_API_BASE_URL=http://localhost:8090 docker compose up --build
+```
+
 Without Docker: `make install`, then run the four Python services in separate terminals —
 `uvicorn alarm_simulator.main:app --port 8000`, `python -m alarm_mcp --transport http`,
 `python -m github_mcp --transport http`, `make ingest`, `uvicorn

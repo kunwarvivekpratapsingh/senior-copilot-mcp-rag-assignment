@@ -31,7 +31,11 @@ services:
     volumes:
       - simulator-data:/data
     ports:
-      - "8000:8000"          # exposed so the Postman collections can run against it
+      # Exposed so the Postman collections can run against it. Host ports are
+      # overridable because 8000 and 8080 are commonly already taken on a developer
+      # machine, and "port already in use" should be a one-line fix rather than an
+      # edit to this file.
+      - "${SIMULATOR_HOST_PORT:-8000}:8000"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 5s
@@ -124,7 +128,9 @@ services:
     volumes:
       - backend-data:/data
     ports:
-      - "8080:8080"
+      # If you change this, change VITE_API_BASE_URL to match: the browser talks to
+      # the host port, and Vite inlines that URL into the frontend at build time.
+      - "${BACKEND_HOST_PORT:-8080}:8080"
     depends_on:
       mcp-alarm-management:
         condition: service_healthy
@@ -146,7 +152,7 @@ services:
         # *browser* uses, so it is localhost, not the compose service name.
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
     ports:
-      - "5173:5173"
+      - "${FRONTEND_HOST_PORT:-5173}:5173"
     depends_on:
       backend:
         condition: service_healthy

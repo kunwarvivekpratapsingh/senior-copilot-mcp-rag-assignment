@@ -56,11 +56,21 @@ tab, where the passage, its section, and its score are shown.
 
 ## 3 · The write gate (≈1 min)
 
-Ask:
+First ask for a draft, which is safe:
 
-> Find recurring alarms for Boiler Feed Pump 101 and raise a GitHub issue for them.
+> Find recurring alarms for Boiler Feed Pump 101 and prepare a GitHub issue draft.
 
-The run stops at `create_issue` with a confirmation dialog showing the exact arguments.
+Six steps run and nothing is written — `draft_issue` is a pure function. **No dialog
+appears**, because nobody asked to file anything. Worth saying out loud: a system that
+prompts for approval when none is needed teaches people to click through the prompt.
+
+Now ask for the write:
+
+> Create a GitHub issue for the recurring alarms on Boiler Feed Pump 101.
+
+The run stops at `create_issue` with a confirmation dialog showing the exact arguments —
+and the title and body in it came from the `draft_issue` step, so what is approved is
+precisely what was shown.
 
 - **Cancel** — nothing is written.
 - Ask again and **Approve** — the step runs and returns an issue number.

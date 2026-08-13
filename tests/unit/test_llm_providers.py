@@ -35,6 +35,14 @@ CATALOGUE = [
      "input_schema": {"type": "object", "properties": {}}},
 ]
 
+# Kept separate so a test can plan with and without the write tool available.
+GITHUB_TOOLS = [
+    {"server": "github-issues", "name": "draft_issue", "description": "Compose. Writes nothing.",
+     "input_schema": {"type": "object", "properties": {}}},
+    {"server": "github-issues", "name": "create_issue", "description": "Create. Gated.",
+     "input_schema": {"type": "object", "properties": {}}},
+]
+
 
 async def drain(provider: LLMProvider, **kwargs: Any) -> str:
     text = ""
@@ -117,6 +125,29 @@ class TestRuleBasedPlanning:
         for question in ["recurring alarms on BFP-101", "alarm floods in Unit 2", "hmm"]:
             plan = await RuleBasedProvider().plan(question, CATALOGUE)
             assert any(s.kind == "retrieval" for s in plan.steps), question
+
+    async def test_drafting_an_issue_never_plans_a_write(self) -> None:
+        """"Draft" is a request to compose text, not to file anything. Planning the
+        write anyway would put an approval prompt in front of someone who never asked
+        for one, which teaches them to click through it."""
+        plan = await RuleBasedProvider().plan(
+            "Draft a GitHub issue for the recurring alarms on Boiler Feed Pump 101",
+            CATALOGUE + GITHUB_TOOLS,
+        )
+        tools = [s.tool for s in plan.steps]
+        assert "draft_issue" in tools
+        assert "create_issue" not in tools
+
+    async def test_asking_to_file_an_issue_plans_the_gated_write(self) -> None:
+        """…and it chains: the write takes its title and body from the draft step,
+        so what the user approves is exactly what was shown to them."""
+        plan = await RuleBasedProvider().plan(
+            "Create a GitHub issue for the recurring alarms on Boiler Feed Pump 101",
+            CATALOGUE + GITHUB_TOOLS,
+        )
+        write = next(s for s in plan.steps if s.tool == "create_issue")
+        assert write.args["title"] == "$s4.output.title"
+        assert write.args["body"] == "$s4.output.body"
 
     async def test_a_template_naming_an_unavailable_tool_degrades_to_a_gap(self) -> None:
         """Better an honest gap than a step that cannot run."""

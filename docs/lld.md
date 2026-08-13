@@ -954,6 +954,16 @@ placeholder default, so the stack runs from a clean clone with no real credentia
 | `LOG_LEVEL` | enum | `INFO` | all | | Default applies |
 | `LOG_FORMAT` | enum | `json` | backend, MCP | | `console` renders human-readable logs |
 | `VITE_API_BASE_URL` | url | `http://localhost:8080` | frontend **build** | | Vite inlines this at build time, not runtime — changing it means rebuilding the image |
+| `BACKEND_HOST_PORT` | int | `8080` | compose only | | Host side of the published backend port. Change it when 8080 is taken, and set `VITE_API_BASE_URL` to match |
+| `FRONTEND_HOST_PORT` | int | `5173` | compose only | | Host side of the published GUI port |
+| `SIMULATOR_HOST_PORT` | int | `8000` | compose only | | Host side of the published simulator port, used by the Postman collections |
+
+**Local values, not container values.** `.env.example` uses `localhost` hosts,
+`:memory:` for the database, and `.chroma` for the index, so a hand-started stack and
+`make test` work from a copied file. Compose sets its own container values (service
+names, `/data` paths) per service and does not read them from here — an earlier version
+shipped container paths in the sample file, which silently broke `make test` for anyone
+who followed the README's `cp .env.example .env`.
 
 **Two deliberate fallbacks.** A missing API key degrades to the deterministic provider,
 and a missing document index degrades to tool-only answers. A demo that dies at startup
