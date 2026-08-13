@@ -72,6 +72,7 @@ dev = [
     "respx>=0.21",
     "ruff>=0.5",
     "mypy>=1.10",
+    "types-jsonschema>=4.20",
 ]
 
 # Every component installed at once, for local development and CI.
@@ -161,6 +162,17 @@ extend-immutable-calls = [
 
 [tool.mypy]
 python_version = "3.11"
+# Two exclusions, for different reasons.
+#
+# The virtualenv: `mypy .` otherwise descends into it and type-checks third-party
+# stubs written for newer Python versions, failing on syntax we never wrote.
+#
+# The tests: they are deliberately full of decoded JSON, which mypy sees as
+# `dict[str, object]` and rejects at almost every access. Annotating each one would
+# add noise to the most-read files in the repository to re-check what the assertion
+# on the next line already checks at runtime. Type checking applies to shipped code;
+# tests are verified by running them.
+exclude = "^(\\.venv|node_modules|dist|build|docs|tests|rag/tests)/"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -170,4 +182,15 @@ plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = ["chromadb.*", "rank_bm25.*", "sentence_transformers.*", "frontmatter.*"]
+ignore_missing_imports = true
+
+# numpy ships typed stubs that use 3.12 syntax. We target 3.11, so following them
+# fails on code we do not own and cannot change. Nothing here calls numpy directly —
+# it arrives as a transitive dependency of chromadb.
+[[tool.mypy.overrides]]
+module = ["numpy", "numpy.*"]
+follow_imports = "skip"
+# Stub files are followed even when `follow_imports = "skip"` unless this is set,
+# which is why skipping alone does not silence a parse error inside a .pyi.
+follow_imports_for_stubs = true
 ignore_missing_imports = true

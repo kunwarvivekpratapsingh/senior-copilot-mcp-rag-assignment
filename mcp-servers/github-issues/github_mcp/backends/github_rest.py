@@ -9,6 +9,8 @@ The token lives here, in the MCP server process. It is never a tool argument.
 
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 
 from .base import Issue
@@ -35,14 +37,22 @@ class GitHubRestBackend:
         await self._client.aclose()
 
     @staticmethod
-    def _to_issue(payload: dict[str, object]) -> Issue:
+    def _to_issue(payload: dict[str, Any]) -> Issue:
+        """Build an Issue from a decoded API response.
+
+        Every field is narrowed rather than trusted: this is the one place in the
+        server where data crosses in from a system we do not control, and a response
+        that omits a field should produce a degraded issue, not an exception.
+        """
+        raw_labels = payload.get("labels")
+        labels = raw_labels if isinstance(raw_labels, list) else []
         return Issue(
-            number=int(payload.get("number", 0)),
+            number=int(payload.get("number") or 0),
             title=str(payload.get("title", "")),
             body=str(payload.get("body") or ""),
             labels=[
                 str(label.get("name", ""))
-                for label in payload.get("labels", [])  # type: ignore[union-attr]
+                for label in labels
                 if isinstance(label, dict)
             ],
             state=str(payload.get("state", "open")),

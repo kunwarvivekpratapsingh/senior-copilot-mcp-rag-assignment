@@ -131,7 +131,12 @@ def list_alarms(
     rows = list(
         session.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
     )
-    asset_names = dict(session.execute(select(Asset.asset_id, Asset.asset_name)).all())
+    asset_names: dict[str, str] = {
+        asset_id: asset_name
+        for asset_id, asset_name in session.execute(
+            select(Asset.asset_id, Asset.asset_name)
+        ).all()
+    }
 
     return AlarmListResponse(
         data=[_record(a, asset_names) for a in rows],

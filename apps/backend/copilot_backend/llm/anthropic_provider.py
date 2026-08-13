@@ -20,9 +20,10 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
 
 from anthropic import AsyncAnthropic
+from anthropic.types import OutputConfigParam, TextBlockParam
 
 from ..orchestrator.models import Plan
 from ..telemetry import get_logger
@@ -69,6 +70,10 @@ class AnthropicProvider:
     ) -> None:
         self._client = AsyncAnthropic(api_key=api_key) if api_key else AsyncAnthropic()
         self._model = model
+        # `effort` arrives as a string from configuration, while the SDK types it as a
+        # literal. Built once here so the cast lives in one place rather than at each
+        # of the two call sites.
+        self._output_config = cast(OutputConfigParam, {"effort": effort})
         self._effort = effort
         self._max_plan_tokens = max_plan_tokens
         self._max_answer_tokens = max_answer_tokens
@@ -88,7 +93,7 @@ class AnthropicProvider:
         # Stable content first, volatile last. The catalogue is byte-identical between
         # requests (the registry sorts it), so it caches; the question does not and
         # therefore sits after the breakpoint.
-        system = [
+        system: list[TextBlockParam] = [
             {
                 "type": "text",
                 "text": (
@@ -105,7 +110,7 @@ class AnthropicProvider:
                 model=self._model,
                 max_tokens=self._max_plan_tokens,
                 output_format=Plan,
-                output_config={"effort": self._effort},
+                output_config=self._output_config,
                 system=system,
                 messages=[{"role": "user", "content": user}],
             )
@@ -128,7 +133,7 @@ class AnthropicProvider:
         )
 
         plan = getattr(response, "parsed_output", None)
-        if plan is None:
+        if not isinstance(plan, Plan):
             raise LLMError("the model returned no parsable plan")
         return plan
 
@@ -161,7 +166,7 @@ class AnthropicProvider:
             async with self._client.messages.stream(
                 model=self._model,
                 max_tokens=self._max_answer_tokens,
-                output_config={"effort": self._effort},
+                output_config=self._output_config,
                 system=system,
                 messages=[
                     {

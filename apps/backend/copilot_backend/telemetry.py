@@ -15,6 +15,7 @@ import logging
 import re
 import sys
 import uuid
+from collections.abc import MutableMapping
 from contextvars import ContextVar
 from typing import Any
 
@@ -70,7 +71,9 @@ def _scrub(value: Any) -> Any:
     return value
 
 
-def redact_processor(_l: Any, _m: str, event_dict: dict[str, Any]) -> dict[str, Any]:
+def redact_processor(
+    _l: Any, _m: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
     """Scrub secrets from every field of every record.
 
     A processor rather than a call-site convention, because "remember not to log the
@@ -79,7 +82,9 @@ def redact_processor(_l: Any, _m: str, event_dict: dict[str, Any]) -> dict[str, 
     return {key: _scrub(value) for key, value in event_dict.items()}
 
 
-def context_processor(_l: Any, _m: str, event_dict: dict[str, Any]) -> dict[str, Any]:
+def context_processor(
+    _l: Any, _m: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
     """Attach the request-scoped identifiers to every record."""
     for key, value in current_context().items():
         if value is not None:

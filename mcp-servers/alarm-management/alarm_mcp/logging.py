@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import re
 import sys
+from collections.abc import MutableMapping
 from typing import Any
 
 import structlog
@@ -44,8 +45,8 @@ def _scrub(value: Any) -> Any:
 
 
 def redact_processor(
-    _logger: Any, _method: str, event_dict: dict[str, Any]
-) -> dict[str, Any]:
+    _logger: Any, _method: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
     """structlog processor that scrubs secrets from every field of every record."""
     return {key: _scrub(value) for key, value in event_dict.items()}
 
