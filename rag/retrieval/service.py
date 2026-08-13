@@ -266,10 +266,20 @@ class RetrievalService:
             for chunk_id, raw in ordered
         ]
 
-        # Confidence is judged on the best ABSOLUTE relevance across the returned
-        # passages — never on the fused rank score, whose top entry is always near the
-        # maximum whether or not anything relevant was found.
-        best_relevance = max((c.similarity for c in chunks), default=0.0)
+        # Confidence is judged on ABSOLUTE relevance — never on the fused rank score,
+        # whose top entry is always near the maximum whether or not anything relevant
+        # was found.
+        #
+        # Coverage is measured against the UNION of the returned passages, not the best
+        # single one. A real question ("investigate recurring alarms on BFP-101,
+        # identify contributing factors, retrieve the procedure…") spreads its terms
+        # across several passages by design; scoring it against one paragraph made a
+        # perfectly good retrieval look like a failure.
+        union = "\n".join(c.text for c in chunks)
+        best_relevance = max(
+            term_coverage(query, union),
+            max((c.similarity for c in chunks), default=0.0),
+        )
         return RetrievalResult(
             query=query,
             chunks=chunks,
