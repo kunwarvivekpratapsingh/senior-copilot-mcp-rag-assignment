@@ -34,8 +34,8 @@ typecheck: ## mypy static analysis
 
 # --- Tests -----------------------------------------------------------------
 
-test: ## Run every test except those needing the compose stack
-	$(PY) -m pytest -m "not e2e"
+test: ## Run the whole suite (no running services required)
+	$(PY) -m pytest
 
 test-unit: ## Unit tests only
 	$(PY) -m pytest tests/unit
@@ -43,11 +43,11 @@ test-unit: ## Unit tests only
 test-integration: ## Integration tests (MCP client <-> servers)
 	$(PY) -m pytest tests/integration
 
-test-e2e: ## End-to-end scenario; requires `make up` first
-	$(PY) -m pytest -m e2e tests/e2e
+test-e2e: ## The acceptance scenario over the HTTP surface, in-process
+	$(PY) -m pytest tests/e2e
 
 coverage: ## Test suite with coverage report
-	$(PY) -m pytest -m "not e2e" --cov --cov-report=term-missing --cov-report=html
+	$(PY) -m pytest --cov --cov-report=term-missing --cov-report=html
 
 # --- Contract check --------------------------------------------------------
 # The Postman collections are the Alarm API specification. This target is the

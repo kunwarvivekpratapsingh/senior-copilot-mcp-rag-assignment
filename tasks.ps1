@@ -35,10 +35,10 @@ switch ($Target) {
             @{ n = "lint";             d = "Ruff check (includes security rules)" },
             @{ n = "format";           d = "Ruff format in place" },
             @{ n = "typecheck";        d = "mypy static analysis" },
-            @{ n = "test";             d = "Every test except those needing the compose stack" },
+            @{ n = "test";             d = "The whole suite; no running services required" },
             @{ n = "test-unit";        d = "Unit tests only" },
             @{ n = "test-integration"; d = "Integration tests" },
-            @{ n = "test-e2e";         d = "End-to-end scenario; run 'up' first" },
+            @{ n = "test-e2e";         d = "Acceptance scenario over the HTTP surface" },
             @{ n = "coverage";         d = "Test suite with coverage report" },
             @{ n = "contract";         d = "Postman collections vs a running simulator" },
             @{ n = "ingest";           d = "Build the RAG index from rag/documents" },
@@ -56,11 +56,11 @@ switch ($Target) {
     "lint"             { Invoke-Step "Ruff check"            { & $PY -m ruff check . } }
     "format"           { Invoke-Step "Ruff format"           { & $PY -m ruff format . } }
     "typecheck"        { Invoke-Step "mypy"                  { & $PY -m mypy . } }
-    "test"             { Invoke-Step "pytest"                { & $PY -m pytest -m "not e2e" } }
+    "test"             { Invoke-Step "pytest"                { & $PY -m pytest } }
     "test-unit"        { Invoke-Step "pytest unit"           { & $PY -m pytest tests/unit } }
     "test-integration" { Invoke-Step "pytest integration"    { & $PY -m pytest tests/integration } }
-    "test-e2e"         { Invoke-Step "pytest e2e"            { & $PY -m pytest -m e2e tests/e2e } }
-    "coverage"         { Invoke-Step "pytest + coverage"     { & $PY -m pytest -m "not e2e" --cov --cov-report=term-missing --cov-report=html } }
+    "test-e2e"         { Invoke-Step "pytest e2e"            { & $PY -m pytest tests/e2e } }
+    "coverage"         { Invoke-Step "pytest + coverage"     { & $PY -m pytest --cov --cov-report=term-missing --cov-report=html } }
     "ingest"           { Invoke-Step "Building RAG index"    { & $PY -m rag.ingestion.cli --docs ./rag/documents --reset } }
     "smoke"            { Invoke-Step "MCP smoke test"        { & $PY scripts/mcp_smoke.py } }
     "up"               { Invoke-Step "docker compose up"     { docker compose up --build -d } }

@@ -1,0 +1,200 @@
+name: CI
+
+# Every gate the README claims is enforced here, so a claim in the docs cannot
+# quietly stop being true. The contract job is the important one: the Postman
+# collections are the Alarm API's specification, and newman checking them against the
+# simulator is the only thing that keeps the two from drifting apart.
+
+on:
+  push:
+    branches: [main, "feat/**", "fix/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python — lint, types, tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install
+        run: python -m pip install -e ".[all]"
+
+      - name: Lint (ruff, includes bandit security rules)
+        run: python -m ruff check .
+
+      # No `ruff format --check` gate. The formatter reflows the hand-arranged plan
+      # templates and argument tables into a shape that is harder to read, and a
+      # style gate that fights legibility is a gate worth not having. `make format`
+      # remains available for anyone who wants it.
+
+      - name: Type check
+        run: python -m mypy .
+
+      - name: Tests with coverage
+        run: python -m pytest --cov --cov-report=term-missing --cov-report=xml
+
+      - name: Docs match the code
+        # Fails if a tool, schema, or description changed without regenerating the
+        # catalog — the drift that makes a tool catalog worse than none.
+        run: python scripts/gen_tool_catalog.py --check
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage.xml
+
+  contract:
+    name: Contract — newman against the simulator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install
+        run: |
+          python -m pip install -e ".[simulator,mcp,backend,rag]"
+          npm install -g newman
+
+      - name: Start the simulator
+        env:
+          ALARM_API_TOKEN: demo-token
+        run: |
+          uvicorn alarm_simulator.main:app --host 127.0.0.1 --port 8000 &
+          for i in $(seq 1 40); do
+            curl -fsS http://127.0.0.1:8000/health && break
+            sleep 2
+          done
+
+      - name: Baseline collection
+        run: newman run postman/Alarm-API-Simulator.postman_collection.json
+
+      - name: Scenario collection
+        run: newman run postman/scenarios/Alarm-API-Scenarios.postman_collection.json
+
+      - name: Chaining collection
+        run: newman run postman/chaining/Alarm-API-Chaining.postman_collection.json
+
+  frontend:
+    name: Frontend — types, lint, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+
+  security:
+    name: Security — dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: pip-audit
+        run: |
+          python -m pip install pip-audit
+          python -m pip install -e ".[all]"
+          pip-audit --skip-editable
+        continue-on-error: true   # advisory: an upstream CVE must not block the build
+
+      - name: npm audit
+        working-directory: apps/frontend
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Assert no secrets are committed
+        run: |
+          test -f .env.example || { echo "missing .env.example"; exit 1; }
+          if [ -f .env ]; then echo "a real .env is committed"; exit 1; fi
+          if grep -rInE 'sk-ant-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}' \
+             --exclude-dir=.git --exclude-dir=node_modules . ; then
+            echo "a live-looking credential is committed"; exit 1
+          fi
+
+  stack:
+    name: Stack — compose build and smoke
+    runs-on: ubuntu-latest
+    needs: [python, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start
+        run: |
+          cp .env.example .env
+          docker compose up --build -d
+
+      - name: Wait for the backend to become healthy
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/health | grep -q '"status":"ok"'; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "backend never became healthy"; docker compose ps; docker compose logs
+          exit 1
+
+      - name: Smoke — the acceptance scenario over HTTP
+        run: |
+          curl -fsS -X POST http://localhost:8080/chat \
+            -H 'Content-Type: application/json' \
+            -d '{"question":"Investigate recurring high-severity alarms for Boiler Feed Pump 101 over the last 90 days, identify likely contributing factors, retrieve the relevant operating procedure, and provide recommended actions with source evidence."}' \
+            > stream.txt
+          grep -q '\[tool:' stream.txt || { echo "no tool citation in the answer"; exit 1; }
+          grep -q '\[source:' stream.txt || { echo "no document citation in the answer"; exit 1; }
+          grep -q 'answer.completed' stream.txt || { echo "stream never completed"; exit 1; }
+
+      - name: Assert the frontend is served
+        run: curl -fsS http://localhost:5173/ | grep -qi '<div id="root">'
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
