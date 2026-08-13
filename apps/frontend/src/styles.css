@@ -1,0 +1,259 @@
+/* Control-room palette: dark, high contrast, severity colours that mean what they
+   mean on a plant HMI. Hand-written rather than pulled from a UI kit — the brief asks
+   for a working GUI, and a dependency-free stylesheet keeps the Docker image small. */
+
+:root {
+  --bg: #0e1116;
+  --panel: #161b22;
+  --panel-2: #1c232c;
+  --border: #2a323d;
+  --text: #e6edf3;
+  --muted: #8b97a6;
+  --accent: #4d9fff;
+  --ok: #3fb950;
+  --warn: #d29922;
+  --bad: #f85149;
+  --radius: 8px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+button { font: inherit; cursor: pointer; }
+
+.app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ---------- header ---------- */
+
+.header {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.header h1 { margin: 0; font-size: 17px; font-weight: 600; }
+.subtitle { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+
+.server-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+.pill {
+  padding: 3px 10px; border-radius: 999px; font-size: 12px;
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--muted);
+}
+.pill-ok { color: var(--ok); border-color: rgba(63, 185, 80, 0.4); }
+.pill-bad { color: var(--bad); border-color: rgba(248, 81, 73, 0.4); }
+
+/* ---------- layout ---------- */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 1px;
+  flex: 1;
+  min-height: 0;
+  background: var(--border);
+}
+@media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
+
+.panel { display: flex; flex-direction: column; min-height: 0; background: var(--bg); }
+.panel-head { padding: 10px 18px; border-bottom: 1px solid var(--border); }
+.panel-head h2 { margin: 0; font-size: 13px; text-transform: uppercase;
+                 letter-spacing: 0.08em; color: var(--muted); }
+
+/* ---------- chat ---------- */
+
+.answer { flex: 1; overflow-y: auto; padding: 18px; min-height: 0; }
+.answer-text { white-space: pre-wrap; word-break: break-word; }
+
+.empty { color: var(--muted); }
+.empty.small { padding: 18px; font-size: 14px; }
+.samples { list-style: none; padding: 0; margin: 10px 0 0; }
+.samples li { margin-bottom: 8px; }
+
+.link {
+  background: none; border: none; color: var(--accent); text-align: left;
+  padding: 0; font-size: 14px; line-height: 1.45;
+}
+.link:hover { text-decoration: underline; }
+.link:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+
+.loading { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+.spinner {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.error {
+  margin: 12px 0; padding: 10px 12px; border-radius: var(--radius);
+  background: rgba(248, 81, 73, 0.12); border: 1px solid rgba(248, 81, 73, 0.4);
+  color: #ffb3ae;
+}
+.warn {
+  margin: 12px 0; padding: 10px 12px; border-radius: var(--radius);
+  background: rgba(210, 153, 34, 0.12); border: 1px solid rgba(210, 153, 34, 0.4);
+  color: #f0cf7a;
+}
+.warn.small { font-size: 13px; padding: 8px 10px; }
+
+.meta {
+  margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--border);
+  color: var(--muted); font-size: 12px; font-family: var(--mono);
+}
+
+/* Citation chips. Source chips are clickable and jump to the evidence panel;
+   a marker with no matching citation is shown in amber rather than hidden, because
+   an unsupported claim is exactly what a reviewer needs to see. */
+.chip {
+  display: inline-block; margin: 0 2px; padding: 1px 7px;
+  border-radius: 4px; font-size: 12px; font-family: var(--mono);
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--muted);
+  vertical-align: baseline;
+}
+.chip-source { color: var(--accent); border-color: rgba(77, 159, 255, 0.4); }
+.chip-source:hover { background: rgba(77, 159, 255, 0.15); }
+.chip-tool { color: var(--ok); border-color: rgba(63, 185, 80, 0.35); cursor: default; }
+.chip-unknown { color: var(--warn); border-color: rgba(210, 153, 34, 0.5); }
+
+.composer { border-top: 1px solid var(--border); padding: 12px 18px; background: var(--panel); }
+.composer textarea {
+  width: 100%; resize: vertical; padding: 10px; border-radius: var(--radius);
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  font: inherit;
+}
+.composer textarea:focus { outline: none; border-color: var(--accent); }
+.composer-actions {
+  display: flex; align-items: center; justify-content: space-between; margin-top: 8px;
+}
+.hint { color: var(--muted); font-size: 12px; }
+.composer button, .dialog button {
+  padding: 7px 16px; border-radius: var(--radius); border: none;
+  background: var(--accent); color: #04101f; font-weight: 600;
+}
+.composer button:disabled { background: var(--panel-2); color: var(--muted); cursor: default; }
+.dialog button.secondary { background: var(--panel-2); color: var(--text); }
+
+/* ---------- side panel ---------- */
+
+.tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--panel); }
+.tab {
+  flex: 1; padding: 11px 8px; background: none; border: none; color: var(--muted);
+  font-size: 13px; border-bottom: 2px solid transparent;
+}
+.tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+.scroll { flex: 1; overflow-y: auto; padding: 14px 16px; min-height: 0; }
+
+.plan {
+  margin-bottom: 12px; padding: 10px 12px; border-radius: var(--radius);
+  background: var(--panel-2); border: 1px solid var(--border); font-size: 13px;
+}
+.gaps { margin: 6px 0 0 16px; padding: 0; color: var(--warn); font-size: 12px; }
+
+/* ---------- execution timeline ---------- */
+
+.step {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  margin-bottom: 8px; background: var(--panel); overflow: hidden;
+}
+.step-head {
+  display: grid; grid-template-columns: 12px 28px 78px 1fr auto;
+  align-items: center; gap: 8px; width: 100%; padding: 9px 11px;
+  background: none; border: none; color: var(--text); text-align: left; font-size: 13px;
+}
+.step-head:hover { background: var(--panel-2); }
+.step-id { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.step-server {
+  font-size: 11px; font-family: var(--mono); color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.step-label { font-family: var(--mono); font-size: 12px;
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step-time { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot-running { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+.dot-succeeded { background: var(--ok); }
+.dot-failed { background: var(--bad); }
+.dot-skipped { background: var(--warn); }
+@keyframes pulse { 50% { opacity: 0.35; } }
+
+.step-failed { border-color: rgba(248, 81, 73, 0.35); }
+.step-succeeded { border-color: rgba(63, 185, 80, 0.25); }
+
+.step-reason { padding: 0 11px 8px 60px; color: var(--muted); font-size: 12px; }
+.step-error { padding: 0 11px 9px 60px; color: #ffb3ae; font-size: 12px; }
+
+.step-detail, .tool-detail {
+  border-top: 1px solid var(--border); padding: 10px 12px; background: var(--panel-2);
+}
+.step-detail h4, .tool-detail h4 {
+  margin: 0 0 6px; font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted);
+}
+.step-detail h4:not(:first-child), .tool-detail h4:not(:first-child) { margin-top: 12px; }
+
+pre {
+  margin: 0; padding: 9px; max-height: 260px; overflow: auto;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word;
+}
+.trace { margin-top: 10px; color: var(--muted); font-size: 11px; font-family: var(--mono); }
+
+/* ---------- evidence ---------- */
+
+.citation {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 11px 13px; margin-bottom: 10px; background: var(--panel);
+}
+.citation-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.score { color: var(--ok); font-family: var(--mono); font-size: 12px; }
+.citation-section { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.excerpt { margin: 9px 0; font-size: 13.5px; color: #cdd7e2; }
+.marker {
+  font-family: var(--mono); font-size: 11px; color: var(--accent);
+  background: var(--panel-2); padding: 2px 6px; border-radius: 4px;
+}
+
+/* ---------- tool discovery ---------- */
+
+.server-group { margin-bottom: 20px; }
+.server-group h3 {
+  margin: 0 0 8px; font-size: 12px; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--muted);
+}
+.count {
+  margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+  background: var(--panel-2); color: var(--muted); font-size: 11px;
+}
+.tool {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  margin-bottom: 7px; background: var(--panel); overflow: hidden;
+}
+.tool-head { width: 100%; text-align: left; padding: 8px 11px 4px;
+             background: none; border: none; color: var(--accent);
+             font-family: var(--mono); font-size: 12.5px; }
+.tool-desc { margin: 0; padding: 0 11px 9px; color: var(--muted); font-size: 12.5px; }
+
+/* ---------- confirmation dialog ---------- */
+
+.overlay {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65);
+  display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 10;
+}
+.dialog {
+  width: min(560px, 100%); background: var(--panel);
+  border: 1px solid var(--border); border-radius: 12px; padding: 20px;
+}
+.dialog h3 { margin: 0 0 8px; font-size: 16px; }
+.dialog p { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+.dialog code { color: var(--warn); font-family: var(--mono); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
