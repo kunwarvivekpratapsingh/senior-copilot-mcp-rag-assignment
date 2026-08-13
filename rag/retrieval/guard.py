@@ -15,7 +15,8 @@ Two defences, because either alone is weak:
    — but they are marked, and the marking is what an operator needs to act on.
 
 The corpus deliberately contains a poisoned document (``VENDOR-2026-04``) so this is a
-tested boundary rather than a claimed one. See ``rag/tests/test_prompt_injection.py``.
+tested boundary rather than a claimed one. See ``TestPromptInjection`` in
+``rag/tests/test_rag_pipeline.py``.
 """
 
 from __future__ import annotations

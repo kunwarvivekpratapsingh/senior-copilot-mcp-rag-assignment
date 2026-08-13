@@ -184,7 +184,7 @@ flowchart TB
     alarmmcpc["<b>mcp-alarm-management</b> :9000<br/>MCP Python SDK<br/><i>holds ALARM_API_TOKEN</i>"]
     githubmcpc["<b>mcp-github-issues</b> :9001<br/>MCP Python SDK<br/><i>holds GITHUB_TOKEN</i>"]
     simc["<b>alarm-simulator</b> :8000<br/>FastAPI + SQLite<br/><i>validates the bearer token</i>"]
-    chromac["<b>chroma</b> :8001<br/>Vector index<br/><i>no auth, internal network only</i>"]
+    chromac[("<b>Chroma index</b><br/>embedded in the backend process<br/><i>persisted to a volume</i>")]
 
     anthropic["Anthropic API"]
 
@@ -192,7 +192,7 @@ flowchart TB
     frontend -->|"REST + SSE<br/>no auth, local demo"| backendc
     backendc -->|"MCP over<br/>streamable HTTP"| alarmmcpc
     backendc -->|"MCP over<br/>streamable HTTP"| githubmcpc
-    backendc -->|"HTTP<br/>embed + query"| chromac
+    backendc -->|"in-process<br/>embed + query"| chromac
     backendc -->|"HTTPS + x-api-key"| anthropic
     alarmmcpc -->|"HTTP + Bearer<br/>+ trace headers"| simc
     githubmcpc -.->|"HTTPS + token<br/>disabled when GITHUB_MOCK=true"| gh["GitHub REST API"]
@@ -276,8 +276,14 @@ local model or a second vendor.
 add semantic recall; reciprocal rank fusion combines them.
 
 **Consequences.** Hybrid search is an explicitly documented field in the required
-`rag-design.md`, so the fallback becomes a strength. Ingestion has a heavier image
-because model weights are baked in at build time; accepted so runtime needs no network.
+`rag-design.md`, so the fallback becomes a strength.
+
+**Amended during the build.** The dense half defaults to a deterministic hashing
+embedder rather than `sentence-transformers`, which was originally to be baked into the
+image. Model weights added gigabytes and a download to a clean clone, and an evaluator's
+first `docker compose up` succeeding matters more than marginal recall on a 49-chunk
+corpus. The trained embedder remains one environment variable away (DD-07), and BM25
+carries the exact-term queries that dominate operator questions.
 
 ### ADR-04 — `LLMProvider` protocol with two real implementations
 
@@ -407,7 +413,7 @@ were demonstrating exactly the chains we must reproduce through MCP.
 | I-3 | Backend → MCP servers | MCP over streamable HTTP | outbound | none (internal network) | MCP error with `error_code` | 8 s per tool | none at this layer |
 | I-4 | MCP server → Alarm API | HTTP | outbound | `Authorization: Bearer` | `{error:{code,message,trace_id}}` | 5 s | 2, backoff, 5xx/connection only |
 | I-5 | MCP server → GitHub | HTTPS | outbound | token | GitHub JSON error | 10 s | 1 |
-| I-6 | Backend → Chroma | HTTP | outbound | none (internal network) | client exception | 5 s | none |
+| I-6 | Backend → Chroma | in-process call | — | n/a (same process) | Python exception, degraded to a failed retrieval step | none | none |
 | I-7 | Backend → Anthropic | HTTPS | outbound | `x-api-key` | typed SDK exceptions | SDK default | SDK default (2) |
 
 **I-4 is the only hop that carries a source-system credential**, and it originates
@@ -417,23 +423,29 @@ inside a process the language model cannot reach.
 
 ## 9. Deployment view
 
-Six containers on one Docker network.
+**Five** containers on one Docker network — one fewer than planned, because Chroma moved
+in-process (DD-07).
 
 | Service | Port | Health check | Depends on (healthy) |
 |---|---:|---|---|
 | `alarm-simulator` | 8000 | `GET /health` | — |
-| `chroma` | 8001 | vendor heartbeat | — |
-| `mcp-alarm-management` | 9000 | tool-list probe | `alarm-simulator` |
-| `mcp-github-issues` | 9001 | tool-list probe | — |
-| `backend` | 8080 | `GET /health` | both MCP servers, `chroma` |
-| `frontend` | 5173 | HTTP 200 on `/` | `backend` |
+| `mcp-alarm-management` | 9000 | TCP connect on 9000 | `alarm-simulator` |
+| `mcp-github-issues` | 9001 | TCP connect on 9001 | — |
+| `backend` | 8080 | `GET /health` | both MCP servers |
+| `frontend` | 5173 | `GET /healthz` (nginx) | `backend` |
 
 Startup ordering matters: the backend discovers tools at boot, so it must not start
 before the MCP servers are answering. `depends_on: condition: service_healthy` enforces
 this rather than relying on retry-on-boot.
 
-Volumes: simulator SQLite file, Chroma index, and the sentence-transformers model cache
-(baked at build time so runtime needs no network).
+The MCP health check is a TCP connect rather than an HTTP request because the streamable
+HTTP endpoint rejects a bare GET by design; checking that the port accepts connections is
+the honest form of the question at this layer.
+
+The backend's command runs RAG ingestion before uvicorn, so a fresh stack always serves a
+freshly built index; ingestion is a full rebuild and therefore idempotent across restarts.
+
+Volumes: the simulator's SQLite file, and the backend's `/data` holding the Chroma index.
 
 ---
 
@@ -494,7 +506,7 @@ calls.
 | R-2 | Planner emits an unexecutable plan | Medium | High | `messages.parse()` with a Pydantic model makes malformed plans impossible; unknown tools are rejected against the registry |
 | R-3 | Retrieval returns nothing relevant | Medium | Medium | Explicit low-confidence path; hybrid retrieval improves recall over dense-only |
 | R-4 | No API key at demo time | Low | High | `RuleBasedProvider` runs the whole system with no key |
-| R-5 | Docker image bloat from model weights | High | Low | Weights baked once into a shared base layer; documented as a limitation |
+| R-5 | Docker image bloat from model weights | High | Low | **Resolved by removing the cause**: the default embedder is deterministic and local, so no weights are shipped (DD-07) |
 | R-6 | Seed data misses a chaining assertion | Medium | High — four flows assert non-empty results | Seed generator explicitly guarantees each asserted case; covered by a seed test |
 | R-7 | Time box overrun | High | Medium | Load-bearing steps sequenced first; documented cut list that never removes a whole capability |
 | R-8 | Anthropic safety classifier refuses a request | Low | Medium | `stop_reason == "refusal"` checked centrally in the provider before reading content |
@@ -503,43 +515,47 @@ calls.
 
 ## 12. Traceability matrix
 
-Every functional requirement resolves to a component, an LLD section, and a test. Test
-IDs are defined in LLD §10 and are populated as each step lands.
+Every functional requirement resolves to a component, an LLD section, and at least one
+test that exists and passes. Test IDs are defined in [LLD §10](lld.md#10-test-matrix).
 
 | FR | Component | LLD § | Test ID |
 |---|---|---|---|
-| FR-01 | api, frontend | 2.2, 4.7 | T-API-01 |
-| FR-02 | orchestrator/planner | 4.5 | T-ORC-01 |
-| FR-03 | mcp_client/registry | 4.3 | T-MCPC-01 |
-| FR-04 | mcp_client/invoker | 4.3 | T-MCPC-02 |
-| FR-05 | orchestrator/resolver | 5.6 | T-ORC-02 |
-| FR-06 | orchestrator/executor | 4.5 | T-ORC-03 |
+| FR-01 | api, frontend | 2.2, 4.7 | T-E2E-02 |
+| FR-02 | llm (both providers) | 4.4 | T-LLM-02, T-LLM-04 |
+| FR-03 | mcp_client/registry | 4.3 | T-MCPC-01, T-MCPS-01, T-E2E-01 |
+| FR-04 | mcp_client/invoker | 4.3 | T-MCPC-02, T-MCPS-02, T-MCPS-05 |
+| FR-05 | orchestrator/resolver, executor | 5.6 | T-RES-01…10, T-MCPC-02, T-ORCH-01, T-E2E-02 |
+| FR-06 | orchestrator/executor, registry | 4.3, 4.5 | T-MCPC-02 |
 | FR-07 | rag/ingestion/loader | 4.6 | T-RAG-01 |
 | FR-08 | rag/ingestion/chunker | 5.3 | T-RAG-02 |
 | FR-09 | rag/ingestion/indexer | 1.4 | T-RAG-03 |
-| FR-10 | rag/retrieval/service | 5.4 | T-RAG-04 |
-| FR-11 | rag/retrieval/citations | 5.5 | T-RAG-05 |
-| FR-12 | orchestrator/composer | 4.5 | T-ORC-04 |
-| FR-13 | rag/retrieval/service | 5.5 | T-RAG-06 |
-| FR-14 | rag/retrieval/guard | 5.5 | T-RAG-07 |
-| FR-15 | orchestrator/executor | 6 | T-E2E-01 |
-| FR-16 | orchestrator/memory | 7.2 | T-ORC-05 |
-| FR-17 | packages/schemas | 2.2 | T-API-02 |
-| FR-18 | mcp_client/invoker | 4.3 | T-MCPC-03 |
-| FR-19 | mcp_client/registry | 4.3 | T-MCPC-04 |
-| FR-20 | orchestrator/executor | 7.1 | T-ORC-06 |
-| FR-21 | api/telemetry, frontend | 2.3, 4.7 | T-API-03 |
-| FR-22 | api/telemetry | 2.3 | T-API-04 |
-| FR-23 | alarm_mcp/config | 3 | T-MCPS-01 |
-| FR-24 | connectors/alarm_api | 4.1 | T-CONN-01 |
-| FR-25 | alarm_mcp/mapping | 8 | T-MCPS-02 |
-| FR-26 | connectors, alarm_mcp | 8 | T-MCPS-03 |
-| FR-27 | connectors/alarm_api | 2.1 | T-CONN-02 |
-| FR-28 | logging, telemetry | 9 | T-SEC-01 |
-| FR-29 | alarm_mcp, github_mcp | 3 | T-MCPS-04 |
-| FR-30 | github_mcp/create_issue | 7.3 | T-MCPS-05 |
-| FR-31 | frontend | 4.7 | T-UI-01 |
-| FR-32 | alarm_simulator | 1, 2.1 | T-SIM-01 |
+| FR-10 | rag/retrieval/service | 5.4, 7.3 | T-RAG-03, T-ORCH-01 |
+| FR-11 | rag/retrieval/citations | 5.5 | T-RAG-05, T-LLM-03, T-ORCH-01, T-E2E-02 |
+| FR-12 | orchestrator/composer | 4.5 | T-ORCH-01, T-E2E-02 |
+| FR-13 | rag/retrieval/service | 5.5 | T-RAG-04, T-ORCH-02 |
+| FR-14 | rag/retrieval/guard | 9 (rag-design) | T-RAG-06, T-LLM-06 |
+| FR-15 | orchestrator/executor | 6.2 | T-LLM-02, T-ORCH-01, T-E2E-02 |
+| FR-16 | orchestrator/memory | 1.5, 7.2 | T-ORCH-04 |
+| FR-17 | orchestrator/models, api | 1.5, 2.2 | T-ORCH-01, T-E2E-02 |
+| FR-18 | mcp_client/invoker | 4.3 | T-MCPC-03, T-MCPS-05, T-E2E-03 |
+| FR-19 | mcp_client/registry, executor | 4.3, 7.1 | T-MCPC-01, T-MCPC-03, T-ORCH-02 |
+| FR-20 | orchestrator/executor | 7.1 | T-MCPC-03, T-ORCH-02 |
+| FR-21 | api (SSE), frontend timeline | 2.3, 4.7 | T-E2E-02 |
+| FR-22 | mcp_client `ToolResult`, frontend | 4.3, 4.7 | T-E2E-02 |
+| FR-23 | alarm_mcp/config, connector | 3.1, 4.1 | T-SIM-01, T-CONN-01 |
+| FR-24 | connectors/alarm_api | 4.1, 8 | T-CONN-02 |
+| FR-25 | alarm_mcp/mapping | 8 | T-CONN-03, T-MCPS-04 |
+| FR-26 | connectors, alarm_mcp, telemetry | 3.1 | T-SIM-02, T-CONN-01, T-MCPS-03 |
+| FR-27 | connectors/alarm_api, simulator | 2.1 | T-SIM-04, T-CONN-01 |
+| FR-28 | logging, telemetry | 8.3 | T-CONN-04, T-HYG-01…05, T-E2E-02 |
+| FR-29 | alarm_mcp, github_mcp | 3.1, 4.2 | T-MCPS-01 |
+| FR-30 | github_mcp/create_issue, executor | 7.3 | T-MCPC-04, T-ORCH-03 |
+| FR-31 | frontend | 4.7 | T-E2E-01 (data contracts); rendering is untested — see known-limitations |
+| FR-32 | alarm_simulator | 1, 2.1 | T-SIM-01…07, T-SEED-01…05, T-ANL-01…08 |
+
+FR-31 is the one row that does not resolve to a test of the thing itself: the GUI's data
+contracts are covered end to end, but no test asserts what renders. Stated here rather
+than papered over with a test ID that does not exist.
 
 ---
 

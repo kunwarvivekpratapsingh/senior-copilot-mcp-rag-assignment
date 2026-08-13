@@ -78,7 +78,7 @@ For the acceptance scenario the plan is five steps:
 | s2 | tool | `alarm-management/get_alarm_summary` | `asset_ids: ["$s1.output.results[0].asset_id"]` |
 | s3 | tool | `alarm-management/get_alarm_correlation` | `asset_ids: ["$s1.output.results[0].asset_id"]` |
 | s4 | tool | `alarm-management/get_rationalization_candidates` | `asset_ids: ["$s1.output.results[0].asset_id"]` |
-| s5 | retrieval | — | filtered by the asset name resolved in s1 |
+| r1 | retrieval | — | `asset: "$s1.output.results[0].asset_name"` — filtered by what s1 resolved |
 
 ### 4 · Execution and chaining
 
@@ -102,8 +102,8 @@ stable `error_code` the orchestrator can branch on.
 
 ### 5 · Retrieval, inside the same workflow
 
-Step s5 is retrieval, and it runs as an ordinary step. Crucially it is **narrowed by
-`asset_id` from step 1** — the orchestrator now knows which asset the question is about,
+Step r1 is retrieval, and it runs as an ordinary step. Crucially it is **narrowed by the
+asset name from step 1** — the orchestrator now knows which asset the question is about,
 so retrieval filters to chunks tagged for that asset instead of searching the whole
 corpus.
 

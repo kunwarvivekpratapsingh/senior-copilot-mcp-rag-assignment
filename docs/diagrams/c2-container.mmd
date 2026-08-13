@@ -1,6 +1,7 @@
 %% C4 Level 2 — Container view.
-%% The six deployable units, the protocol on every hop, and which process
-%% holds which secret.
+%% The five deployable units, the protocol on every hop, and which process
+%% holds which secret. The vector index is not a container: it runs embedded
+%% inside the backend process (DD-07).
 flowchart TB
     operator(["Plant operator"])
 
@@ -9,7 +10,7 @@ flowchart TB
     alarmmcpc["<b>mcp-alarm-management</b> :9000<br/>MCP Python SDK<br/><i>holds ALARM_API_TOKEN</i>"]
     githubmcpc["<b>mcp-github-issues</b> :9001<br/>MCP Python SDK<br/><i>holds GITHUB_TOKEN</i>"]
     simc["<b>alarm-simulator</b> :8000<br/>FastAPI + SQLite<br/><i>validates the bearer token</i>"]
-    chromac["<b>chroma</b> :8001<br/>Vector index<br/><i>no auth, internal network only</i>"]
+    chromac[("<b>Chroma index</b><br/>embedded in the backend process<br/><i>persisted to a volume</i>")]
 
     anthropic["Anthropic API"]
 
@@ -17,7 +18,7 @@ flowchart TB
     frontend -->|"REST + SSE<br/>no auth, local demo"| backendc
     backendc -->|"MCP over<br/>streamable HTTP"| alarmmcpc
     backendc -->|"MCP over<br/>streamable HTTP"| githubmcpc
-    backendc -->|"HTTP<br/>embed + query"| chromac
+    backendc -->|"in-process<br/>embed + query"| chromac
     backendc -->|"HTTPS + x-api-key"| anthropic
     alarmmcpc -->|"HTTP + Bearer<br/>+ trace headers"| simc
     githubmcpc -.->|"HTTPS + token<br/>disabled when GITHUB_MOCK=true"| gh["GitHub REST API"]
