@@ -290,6 +290,8 @@ async def _build_catalog() -> str:
 # Values that legitimately differ between runs. The `--check` gate compares the
 # catalog with these normalised away, so it fails on the drift that matters — a
 # changed schema, description, or tool list — and not on the clock.
+EXAMPLE_RESPONSE_HEADING = "**Example response.**"
+
 VOLATILE = [
     (re.compile(r"\d{4}-\d{2}-\d{2}T[\d:.+\-Z]+"), "<TIMESTAMP>"),
     (re.compile(r"trace-[0-9a-f]{6,}"), "trace-<ID>"),
@@ -304,7 +306,36 @@ VOLATILE = [
 ]
 
 
+def strip_example_responses(text: str) -> str:
+    """Drop the captured example responses, keeping everything else.
+
+    Example responses are real output from seeded data whose window slides with the
+    current date, so alarm counts, correlation supports, and maintenance dates all
+    move on their own. Comparing them would make the gate fail on a day when nothing
+    had changed — which is exactly what happened the first time CI ran this.
+
+    What remains is the part the gate exists to protect: the tool list, the
+    descriptions the planner reads, and the input and output schemas.
+    """
+    kept: list[str] = []
+    skipping = False
+    for line in text.splitlines():
+        if line.strip() == EXAMPLE_RESPONSE_HEADING:
+            skipping = True
+            kept.append(line)
+            continue
+        if skipping:
+            # Sections end at the next tool, server, or bolded field.
+            if line.startswith(("### ", "## ", "**")):
+                skipping = False
+            else:
+                continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
 def normalise(text: str) -> str:
+    text = strip_example_responses(text)
     for pattern, replacement in VOLATILE:
         text = pattern.sub(replacement, text)
     return text
