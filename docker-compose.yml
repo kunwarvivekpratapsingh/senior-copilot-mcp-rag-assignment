@@ -1,0 +1,171 @@
+# The whole system: five services, no external dependencies.
+#
+#   cp .env.example .env && docker compose up --build
+#
+# Startup ordering is enforced with health checks rather than `depends_on` alone,
+# because `depends_on` waits for a container to *start*, and the backend discovers
+# MCP tools during its own startup — a race that would leave it with an empty tool
+# registry and a copilot that can plan nothing.
+#
+# There is no vector-database container: Chroma runs embedded inside the backend
+# process. One less service to start, one less network hop, one less failure mode.
+
+name: multi-mcp-copilot
+
+services:
+  alarm-simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: copilot/python-services:latest
+    command:
+      - uvicorn
+      - alarm_simulator.main:app
+      - --host=0.0.0.0
+      - --port=8000
+    environment:
+      ALARM_API_TOKEN: ${ALARM_API_TOKEN:-demo-token}
+      ALARM_SIM_DB_PATH: /data/alarms.db
+      ALARM_SIM_SEED: ${ALARM_SIM_SEED:-20260811}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - simulator-data:/data
+    ports:
+      # Exposed so the Postman collections can run against it. Host ports are
+      # overridable because 8000 and 8080 are commonly already taken on a developer
+      # machine, and "port already in use" should be a one-line fix rather than an
+      # edit to this file.
+      - "${SIMULATOR_HOST_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 20s      # seeding ~3000 alarms happens during startup
+
+  mcp-alarm-management:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: copilot/python-services:latest
+    command: ["python", "-m", "alarm_mcp", "--transport=http"]
+    environment:
+      # The token lives here and nowhere upstream of it. The orchestrator and the
+      # model never see it, and it is never accepted as a tool argument.
+      ALARM_API_TOKEN: ${ALARM_API_TOKEN:-demo-token}
+      ALARM_API_BASE_URL: http://alarm-simulator:8000
+      ALARM_API_TIMEOUT_SECONDS: ${ALARM_API_TIMEOUT_SECONDS:-5}
+      ALARM_API_MAX_RETRIES: ${ALARM_API_MAX_RETRIES:-2}
+      MCP_ALARM_HOST: 0.0.0.0
+      MCP_ALARM_PORT: 9000
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      alarm-simulator:
+        condition: service_healthy
+    healthcheck:
+      # The MCP endpoint rejects a bare GET by design, so this checks that the port
+      # is accepting connections rather than that a request succeeds.
+      test: ["CMD", "python", "-c", "import socket;socket.create_connection(('localhost',9000),timeout=3).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  mcp-github-issues:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: copilot/python-services:latest
+    command: ["python", "-m", "github_mcp", "--transport=http"]
+    environment:
+      # Mock by default: the demo needs no credentials and touches no real repository.
+      GITHUB_MOCK: ${GITHUB_MOCK:-true}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_REPO: ${GITHUB_REPO:-owner/repo}
+      MCP_GITHUB_HOST: 0.0.0.0
+      MCP_GITHUB_PORT: 9001
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket;socket.create_connection(('localhost',9001),timeout=3).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: copilot/python-services:latest
+    # Ingestion runs before the API starts. It is idempotent (a full rebuild of the
+    # index), so a restart re-ingests rather than accumulating duplicate chunks.
+    command:
+      - sh
+      - -c
+      - >
+        python -m rag.ingestion.cli
+        --docs ./rag/documents
+        --persist "$${CHROMA_PATH}"
+        --embedder "$${EMBEDDING_MODEL}"
+        --reset
+        && exec uvicorn copilot_backend.api.app:app --host 0.0.0.0 --port 8080
+    environment:
+      MCP_ALARM_URL: http://mcp-alarm-management:9000/mcp
+      MCP_GITHUB_URL: http://mcp-github-issues:9001/mcp
+      MCP_TOOL_TIMEOUT_SECONDS: ${MCP_TOOL_TIMEOUT_SECONDS:-8}
+      LLM_PROVIDER: ${LLM_PROVIDER:-rule_based}
+      LLM_MODEL: ${LLM_MODEL:-claude-opus-5}
+      LLM_EFFORT: ${LLM_EFFORT:-high}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CHROMA_PATH: /data/chroma
+      CHROMA_COLLECTION: ${CHROMA_COLLECTION:-operations-docs}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-hashing}
+      RETRIEVAL_TOP_K: ${RETRIEVAL_TOP_K:-5}
+      RETRIEVAL_MIN_SCORE: ${RETRIEVAL_MIN_SCORE:-0.35}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    volumes:
+      - backend-data:/data
+    ports:
+      # If you change this, change VITE_API_BASE_URL to match: the browser talks to
+      # the host port, and Vite inlines that URL into the frontend at build time.
+      - "${BACKEND_HOST_PORT:-8080}:8080"
+    depends_on:
+      mcp-alarm-management:
+        condition: service_healthy
+      mcp-github-issues:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+      args:
+        # Baked in at build time — Vite inlines VITE_* variables. This is the URL the
+        # *browser* uses, so it is localhost, not the compose service name.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+    ports:
+      - "${FRONTEND_HOST_PORT:-5173}:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      # 127.0.0.1, not localhost: busybox wget resolves localhost to ::1 first and
+      # nginx listens on IPv4 only, so the check fails against a perfectly healthy
+      # container.
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:5173/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  simulator-data:
+  backend-data:

@@ -1,0 +1,83 @@
+%% Primary architecture diagram — exports to docs/architecture-diagram.png
+%% Covers every element required by Submission_and_Evaluation_Guidelines.md §9:
+%% GUI, copilot orchestration, MCP client, MCP server, Alarm Management API,
+%% secondary source, RAG ingestion, retrieval index, document store,
+%% observability, and authentication boundaries.
+%% Layout is deliberately a single vertical spine (request flows downward,
+%% evidence flows back up) so the read order is obvious. Credential ownership is
+%% annotated on the node that holds the secret — that is the authentication
+%% boundary, and stating it in place is clearer than a floating legend.
+%% NOTE: never leave a bare "%%" line in a .mmd file. Mermaid's comment stripper
+%% merges it with the following line and the parse fails on line 1.
+flowchart TB
+    operator(["Plant operator"])
+
+    subgraph gui["GUI · apps/frontend (React + TypeScript)"]
+        direction LR
+        chat["Chat<br/><i>streamed answer + citations</i>"]
+        panels["Tool discovery · Execution timeline<br/>RAG evidence · Write confirmation"]
+    end
+
+    subgraph backend["Copilot orchestration · apps/backend (FastAPI)"]
+        direction TB
+        planner["Planner<br/><i>question → typed plan</i>"]
+        executor["Executor<br/><i>resolve → validate → invoke</i><br/><i>chains step output into step input</i>"]
+        composer["Composer<br/><i>merges tool + document evidence,</i><br/><i>enforces citations</i>"]
+        mcpclient["MCP client / tool registry<br/><i>discovery, schema validation, retry</i>"]
+        retrieval["Retrieval service<br/><i>hybrid BM25 + dense, filtered</i>"]
+        telemetry["Observability<br/><i>structured logs + trace store</i>"]
+
+        planner --> executor --> composer
+        executor --> mcpclient
+        executor --> retrieval
+    end
+
+    subgraph mcplayer["MCP servers · candidate-built"]
+        direction LR
+        alarmmcp["<b>alarm-management</b><br/>14 typed tools<br/><i>holds ALARM_API_TOKEN</i>"]
+        githubmcp["<b>github-issues</b><br/>3 tools, write gated<br/><i>holds GITHUB_TOKEN</i>"]
+    end
+
+    subgraph sources["Source systems"]
+        direction LR
+        sim["Alarm Management API<br/>services/alarm-simulator<br/><i>15 endpoints, validates bearer</i>"]
+        gh["GitHub Issues<br/><i>mock by default, or REST</i>"]
+    end
+
+    subgraph ragpipe["RAG pipeline · rag/"]
+        direction LR
+        docstore[("Document store<br/>rag/documents")]
+        ingest["Ingestion<br/><i>extract → chunk → embed</i>"]
+        index[("Retrieval index<br/>Chroma + BM25")]
+        docstore --> ingest --> index
+    end
+
+    llm["LLM provider<br/>claude-opus-5<br/><i>backend holds ANTHROPIC_API_KEY</i>"]
+
+    operator --> gui
+    gui -->|"REST + SSE"| planner
+    composer -->|"answer, trace, evidence"| gui
+
+    planner -.->|"plan"| llm
+    composer -.->|"compose"| llm
+
+    mcpclient ==>|"MCP"| alarmmcp
+    mcpclient ==>|"MCP"| githubmcp
+    alarmmcp ==>|"HTTP + bearer + trace headers"| sim
+    githubmcp ==>|"HTTPS + token"| gh
+
+    retrieval --> index
+    executor -.-> telemetry
+    telemetry -.->|"step events"| gui
+
+    classDef ui fill:#EEEDFE,stroke:#534AB7,stroke-width:1px,color:#26215C
+    classDef orch fill:#EEEDFE,stroke:#534AB7,stroke-width:1px,color:#26215C
+    classDef mcp fill:#E1F5EE,stroke:#0F6E56,stroke-width:1px,color:#04342C
+    classDef src fill:#F1EFE8,stroke:#5F5E5A,stroke-width:1px,color:#2C2C2A
+    classDef rag fill:#FAECE7,stroke:#993C1D,stroke-width:1px,color:#4A1B0C
+
+    class chat,panels ui
+    class planner,executor,composer,mcpclient,retrieval,telemetry orch
+    class alarmmcp,githubmcp mcp
+    class sim,gh,llm,operator src
+    class docstore,ingest,index rag

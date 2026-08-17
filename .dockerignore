@@ -1,0 +1,33 @@
+# Keeping the build context small keeps builds fast and, more importantly, keeps
+# local secrets and local state out of the image entirely.
+
+.git
+.github
+.venv
+venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+htmlcov
+
+# Local state, rebuilt inside the container.
+.chroma
+*.db
+data
+
+# Never copy a real environment file into an image. .env.example is enough to build.
+.env
+.env.*
+!.env.example
+
+# Frontend build inputs are copied by apps/frontend/Dockerfile from its own context.
+node_modules
+apps/frontend/node_modules
+apps/frontend/dist
+
+docs/diagrams/*.png
+test-data
+postman/newman

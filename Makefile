@@ -10,7 +10,8 @@ PIP ?= $(PY) -m pip
 COMPOSE ?= docker compose
 
 .PHONY: help install lint format typecheck test test-unit test-integration test-e2e \
-        contract coverage ingest smoke up down logs ps docs clean
+        contract contract-negative coverage ingest smoke up down logs ps docs \
+        screenshots clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -34,8 +35,8 @@ typecheck: ## mypy static analysis
 
 # --- Tests -----------------------------------------------------------------
 
-test: ## Run every test except those needing the compose stack
-	$(PY) -m pytest -m "not e2e"
+test: ## Run the whole suite (no running services required)
+	$(PY) -m pytest
 
 test-unit: ## Unit tests only
 	$(PY) -m pytest tests/unit
@@ -43,21 +44,25 @@ test-unit: ## Unit tests only
 test-integration: ## Integration tests (MCP client <-> servers)
 	$(PY) -m pytest tests/integration
 
-test-e2e: ## End-to-end scenario; requires `make up` first
-	$(PY) -m pytest -m e2e tests/e2e
+test-e2e: ## The acceptance scenario over the HTTP surface, in-process
+	$(PY) -m pytest tests/e2e
 
 coverage: ## Test suite with coverage report
-	$(PY) -m pytest -m "not e2e" --cov --cov-report=term-missing --cov-report=html
+	$(PY) -m pytest --cov --cov-report=term-missing --cov-report=html
 
 # --- Contract check --------------------------------------------------------
 # The Postman collections are the Alarm API specification. This target is the
 # acceptance gate for the simulator: it must pass before the MCP server is
 # considered integrable. Requires: npm i -g newman
 POSTMAN_DIR ?= postman
+POSTMAN_ENV ?= test-data/local.postman_environment.json
 contract: ## Run all Postman collections against a running simulator
-	newman run $(POSTMAN_DIR)/Alarm-API-Simulator.postman_collection.json
-	newman run $(POSTMAN_DIR)/scenarios/Alarm-API-Scenarios.postman_collection.json
-	newman run $(POSTMAN_DIR)/chaining/Alarm-API-Chaining.postman_collection.json
+	newman run $(POSTMAN_DIR)/Alarm-API-Simulator.postman_collection.json -e $(POSTMAN_ENV)
+	newman run $(POSTMAN_DIR)/scenarios/Alarm-API-Scenarios.postman_collection.json -e $(POSTMAN_ENV)
+	newman run $(POSTMAN_DIR)/chaining/Alarm-API-Chaining.postman_collection.json -e $(POSTMAN_ENV)
+
+contract-negative: ## Prove newman fails when assertions fail (expects exit 1)
+	! newman run test-data/Negative-Control.postman_collection.json -e $(POSTMAN_ENV)
 
 # --- Application tasks -----------------------------------------------------
 
@@ -87,6 +92,9 @@ ps: ## Show service health
 docs: ## Regenerate the MCP tool catalog and export diagrams
 	$(PY) scripts/gen_tool_catalog.py
 	bash scripts/gen_diagrams.sh
+
+screenshots: ## Capture GUI screenshots (needs the stack running: make up)
+	node scripts/gen_screenshots.mjs
 
 clean: ## Remove caches and build artefacts
 	rm -rf .pytest_cache .mypy_cache .ruff_cache htmlcov .coverage coverage.xml dist build
